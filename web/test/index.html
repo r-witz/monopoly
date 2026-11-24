@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quartiers (client de test)</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.35 system-ui, sans-serif; background: #f3f1ea; color: #222; }
+  header { padding: 8px 14px; background: #2b2d42; color: #fff; display: flex; gap: 12px; align-items: baseline; }
+  header b { font-size: 16px; }
+  #status { color: #ffd23f; }
+  main { padding: 14px; }
+  button { font: inherit; padding: 4px 10px; margin: 2px; cursor: pointer; border: 1px solid #888; border-radius: 4px; background: #fff; }
+  button.main { background: #2b2d42; color: #fff; border-color: #2b2d42; }
+  button:disabled { opacity: .4; cursor: default; }
+  input, select { font: inherit; padding: 3px 5px; margin: 2px; }
+  input[type=number] { width: 80px; }
+  .box { background: #fff; border: 1px solid #ccc; border-radius: 6px; padding: 10px; margin-bottom: 10px; }
+  .box h3 { margin: 0 0 6px; font-size: 14px; }
+  .lobby { max-width: 640px; }
+  .game { display: flex; gap: 14px; align-items: flex-start; }
+  .board { display: grid; grid-template-columns: repeat(9, 74px); grid-template-rows: repeat(9, 74px); gap: 2px; flex: none; }
+  .sq { background: #fffdf6; border: 1px solid #bbb; font-size: 10px; padding: 2px; position: relative; cursor: pointer; overflow: hidden; }
+  .sq.sel { outline: 3px solid #2b2d42; z-index: 1; }
+  .sq .band { height: 8px; margin: -2px -2px 2px; }
+  .sq .owner { position: absolute; bottom: 0; left: 0; right: 0; height: 5px; }
+  .sq.mortgaged { background: repeating-linear-gradient(45deg, #eee, #eee 5px, #fff 5px, #fff 10px); }
+  .sq .lvl { font-size: 11px; }
+  .sq .pawns { position: absolute; bottom: 7px; right: 2px; display: flex; gap: 2px; }
+  .pawn { width: 12px; height: 12px; border-radius: 50%; border: 1px solid #000; display: inline-block; vertical-align: middle; }
+  .center { grid-row: 2 / 9; grid-column: 2 / 9; background: #e9efe4; border: 1px solid #bbb; padding: 12px; overflow: auto; }
+  .dice { font-size: 28px; }
+  aside { flex: 1; min-width: 320px; max-width: 520px; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { padding: 3px 5px; text-align: left; border-bottom: 1px solid #eee; }
+  tr.turn { background: #fff4c2; }
+  tr.out { opacity: .4; text-decoration: line-through; }
+  .log { max-height: 260px; overflow: auto; font-size: 12px; }
+  .log div { padding: 1px 0; border-bottom: 1px dotted #eee; }
+  .muted { color: #777; }
+  .timer { font-weight: bold; color: #c2185b; }
+  .settings label { display: inline-block; margin: 2px 10px 2px 0; }
+</style>
+</head>
+<body>
+<header><b>Quartiers</b><span>client de test</span><span id="status"></span></header>
+<main id="app"></main>
+<script src="app.js"></script>
+</body>
+</html>

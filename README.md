@@ -1,0 +1,92 @@
+# Quartiers (nom de travail)
+
+Jeu de plateau multijoueur dans le navigateur : on achète des rues, on encaisse des loyers, on
+construit, on négocie, en version « classique rapide ». Ce dépôt contient **le serveur Go, le
+moteur de règles** et **le client 3D** (`web/`), plus un client de test brut (`web/test/`).
+
+Le plateau, les noms, les prix et les cartes sont propres au jeu : 32 cases, une ville portuaire
+fictive, 6 groupes de rues, 4 lignes de transport, 2 compagnies et un paquet de cartes « Rumeur ».
+
+## Lancer
+
+```sh
+go run .                  # http://localhost:3000 : le jeu ; /test/ : le client de test ; ws://localhost:3000/ws, /healthz
+go test ./...             # moteur : 3000 parties aléatoires + cas ciblés ; serveur : parties de bots en WebSocket
+go test -race ./internal/server
+```
+
+| Variable | Défaut | Rôle |
+| --- | --- | --- |
+| `PORT`, `HOST` | `3000`, `0.0.0.0` | adresse d'écoute |
+| `MAX_ROOMS` | `200` | salles ouvertes en même temps |
+| `TRUST_PROXY` | – | `1` derrière **un** reverse proxy : l'IP vient de `X-Forwarded-For` |
+
+**Tester seul en local** : ouvrir http://localhost:3000 dans un onglet, créer une salle, puis
+ouvrir le lien de la salle (`/#CODE`) dans d'autres onglets. Chaque onglet est un joueur, car le
+jeton et le nom sont gardés par onglet. Les clients sont du HTML et du JS sans compilation,
+embarqués dans le binaire : il faut relancer `go run .` après une modification.
+
+Tout est en mémoire : un redémarrage perd les salles. Les clients reçoivent la fermeture 1012 et
+se reconnectent.
+
+## Ce qu'il y a dedans
+
+```
+main.go              serveur HTTP : /ws, /healthz, le client de test (/)
+web/                 le client 3D, sans compilation (modules ES)
+  scene.js           la 3D (Three.js r170 embarqué dans web/vendor) : île, plateau, cases dessinées
+                     depuis le plateau du serveur, pions, dés, maisons, caméra, clic sur une case
+  hud.js             l'interface HTML par-dessus : accueil, salon, joueurs, actions, fiche de case,
+                     échanges, journal, carte piochée, podium
+  main.js            connexion, état, clics ; joue les événements d'un message « game » l'un après
+                     l'autre (dés, pion case par case, carte…), puis affiche l'état
+  vendor/            Three.js (MIT), polices DynaPuff et Nunito (OFL), reprises du golf
+web/test/            client de test brut : index.html + app.js
+internal/engine      les règles, une machine à états pure : ni horloge, ni réseau, ni verrou, aléa à graine
+  board.go           le plateau et les cartes (données)
+  game.go            état, phases, Apply / Timeout / Resign / Finish, classement
+  turn.go            dés, déplacement, cases, cartes, prison, dettes
+  assets.go          constructions, hypothèques, liquidation, faillite
+  market.go          achats, enchères, échanges
+  view.go            ce que reçoivent les clients (état complet + événements)
+internal/server      salles et connexions, repris de P'tits Trous (../golf) : hub, room, conn, shard
+  game.go            la partie dans la salle : démarrage, minuteurs, diffusion
+```
+
+Le socle réseau est celui du golf, presque à l'identique : sessions par jeton (reconnexion
+transparente), salles par code ou lien, publiques ou privées, propriétaire qui règle, lance,
+arrête et exclut, anti-flood, écriture non bloquante. Le protocole est décrit en tête de
+`internal/server/proto.go`, et les actions de jeu en tête de `engine.Game.Apply`.
+
+## Les règles (classique rapide)
+
+- 2 à 8 joueurs. Le propriétaire de la salle règle l'argent de départ, le salaire, de 0 à 3 rues
+  offertes au départ, la fin de partie et les minuteurs.
+- **Fin** : au bout de N tours de table (par défaut 25), au bout de N minutes, ou au dernier
+  survivant. Dans les deux premiers cas, le plus riche gagne (cash + propriétés + constructions).
+- On lance 2 dés. Un double fait rejouer, trois doubles envoient au poste de police. Pour sortir :
+  faire un double, payer 60 ou jouer une carte. Après 3 essais, l'amende est due de toute façon.
+- **Case libre** : on l'achète, ou une enchère s'ouvre pour tous. Elle se ferme quand tout le
+  monde a passé, ou après N secondes sans nouvelle offre.
+- **Loyers** : doublés sur un groupe complet sans construction. Ensuite 3 niveaux de maisons puis
+  une tour, construits uniformément. Le loyer est tiré d'une même courbe de prix pour toutes les
+  rues.
+- **Dette** : on vend, on hypothèque ou on échange pour payer, sinon c'est la faillite. Tout part
+  alors au créancier, ou retourne à la banque.
+- **Échanges** : propriétés et argent dans les deux sens, à tout moment. On ne peut pas en
+  accepter pendant une enchère. Une offre est revérifiée à l'acceptation, et un nouvel envoi
+  remplace l'offre précédente du même joueur.
+- **Minuteur** : si le joueur ne décide pas à temps, le serveur joue à sa place. Il lance les dés,
+  refuse l'achat (ce qui ouvre l'enchère), clôt l'enchère, vend et hypothèque pour payer une dette
+  (ou déclare la faillite), puis finit le tour. Une partie ne bloque donc jamais.
+
+Choix faits pour la salle :
+
+- qui arrive en cours de partie la regarde, sans jouer ;
+- quitter la salle ou en être exclu pendant la partie vaut abandon : les biens retournent à la
+  banque ;
+- un joueur déconnecté garde sa place 5 minutes, le minuteur jouant pour lui. Au-delà, il
+  abandonne.
+
+Limite connue : un joueur endetté peut encore céder ses propriétés par échange avant de faire
+faillite. Il ne peut pas céder d'argent.
