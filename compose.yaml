@@ -1,0 +1,15 @@
+# The game alone, on port 3000 of the server (PORT in .env next to this file to change it).
+# Start or update: git pull && docker compose up -d --build
+# Behind a reverse proxy (TLS), set TRUST_PROXY=1 in .env so the players' address is read from
+# X-Forwarded-For; never without one (a player could pretend to be anyone).
+services:
+  quartiers:
+    build: .
+    restart: unless-stopped
+    environment:
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      MAX_ROOMS: ${MAX_ROOMS:-200}
+    ports: ["${PORT:-3000}:3000"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]

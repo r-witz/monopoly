@@ -26,6 +26,32 @@ ouvrir le lien de la salle (`/#CODE`) dans d'autres onglets. Chaque onglet est u
 jeton et le nom sont gardés par onglet. Les clients sont du HTML et du JS sans compilation,
 embarqués dans le binaire : il faut relancer `go run .` après une modification.
 
+## Docker
+
+Image `scratch` : rien d'autre que le binaire statique, client compris (11 Mo selon
+`docker images`), utilisateur non root, aucun fichier écrit. Elle tourne telle quelle en lecture
+seule et sans capacités :
+
+```sh
+docker build -t quartiers . && docker run --read-only --cap-drop ALL --security-opt no-new-privileges -p 3000:3000 quartiers
+```
+
+- la construction lance les tests (`go test -short ./...`) et s'arrête s'ils échouent ;
+- le binaire est compilé sans HTTP/2 (`-tags nethttpomithttp2`) : le serveur ne parle que
+  HTTP/1.1 en clair, le TLS est l'affaire du reverse proxy ;
+- le healthcheck est le binaire lui-même (`quartiers healthcheck`), qui vérifie seulement que le
+  port accepte une connexion ;
+- les caches de Go sont gardés entre deux constructions (BuildKit) : seul ce qui a changé est
+  recompilé ;
+- il faut Docker 25 ou plus récent (`--start-interval`).
+
+**En production**, `compose.yaml` lance le jeu seul, sur le port 3000 du serveur. Les réglages
+facultatifs vont dans un fichier `.env` à côté : `PORT`, `MAX_ROOMS`, et `TRUST_PROXY=1`
+seulement derrière un reverse proxy. Pour lancer comme pour mettre à jour :
+`git pull && docker compose up -d --build`. Si la construction échoue (un test cassé), l'ancien
+conteneur continue de tourner. Pour HTTPS, il faut un reverse proxy devant, qui laisse passer les
+WebSockets de `/ws`.
+
 Tout est en mémoire : un redémarrage perd les salles. Les clients reçoivent la fermeture 1012 et
 se reconnectent.
 
