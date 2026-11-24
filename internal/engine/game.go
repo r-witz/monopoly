@@ -21,10 +21,9 @@ const (
 
 // Rules are the numbers a room chooses for a game.
 type Rules struct {
-	StartCash  int // each player's cash at the start
-	Salary     int // when passing or landing on the start
-	StartProps int // random streets dealt to each player at the start, free
-	MaxRounds  int // the game ends after this many rounds, the richest winning; 0: no limit
+	StartCash int // each player's cash at the start, their only asset
+	Salary    int // when passing or landing on the start
+	MaxRounds int // the game ends after this many rounds, the richest winning; 0: no limit
 }
 
 // Action is a player's move. Which fields count depends on Kind.
@@ -117,19 +116,10 @@ func New(b *Board, r Rules, ids []uint32, seed uint64) *Game {
 		g.Players = append(g.Players, &Player{ID: id, Cash: r.StartCash})
 	}
 	g.Deeds = make([]Deed, len(b.Squares))
-	var streets []int
 	for i := range g.Deeds {
 		g.Deeds[i].Owner = -1
-		if b.Squares[i].Kind == KindStreet {
-			streets = append(streets, i)
-		}
 	}
 	g.deck = g.rng.Perm(len(b.Cards))
-	g.rng.Shuffle(len(streets), func(i, j int) { streets[i], streets[j] = streets[j], streets[i] })
-	deal := min(r.StartProps, len(streets)/max(1, len(ids)))
-	for i := range deal * len(ids) {
-		g.Deeds[streets[i]].Owner = i % len(ids)
-	}
 	g.setPhase(PhaseRoll)
 	g.emit(Event{Kind: "turn", Who: g.id(0)})
 	return g

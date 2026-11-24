@@ -188,7 +188,7 @@ const handlers = {
     if (me && !confirm('Quitter pendant la partie, c\'est abandonner. Sûr ?')) return;
     send({ t: 'leave' });
   },
-  settings() { const { name, ...settings } = app.draft; send({ t: 'settings', name, settings }); hud.toast('Règles enregistrées.'); },
+  settings() { const { name, ...settings } = app.draft; send({ t: 'settings', name, settings }); },
   start: () => send({ t: 'start' }),
   stop: () => confirm('Arrêter la partie pour tout le monde ?') && send({ t: 'stop' }),
   kick: d => send({ t: 'kick', id: +d.id }),
@@ -196,6 +196,7 @@ const handlers = {
   bid: () => act('bid', { amount: app.bid }),
   bidQuick(d) { app.bid = (app.game.auction?.high || 0) + +d.n; act('bid', { amount: app.bid }); },
   unselect() { app.selected = -1; scene.select(-1); hud.render(app); },
+  pick: d => scene.onPick(+d.sq),
   toggleLog() { app.logOpen = !app.logOpen; hud.renderLog(app); },
   openTrade() { app.trade = { to: app.trade.to, give: [], get: [], giveCash: 0, getCash: 0 }; app.modal = hud.tradeModal; hud.render(app); },
   tradeTo(d) { Object.assign(app.trade, { to: +d.id, get: [] }); hud.render(app); },
@@ -235,6 +236,7 @@ document.addEventListener('change', e => {
     hud.render(app);
   } else if (b.set && app.draft) {
     app.draft[b.set] = t.type === 'checkbox' ? t.checked : t.type === 'number' ? +t.value : t.value;
+    handlers.settings();
     if (b.set === 'end') hud.render(app);
   } else if (t.id === 'name') saveName();
 });

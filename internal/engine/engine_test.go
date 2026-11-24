@@ -125,7 +125,7 @@ func TestRandomGames(t *testing.T) {
 	}
 	for seed := range uint64(games) {
 		r := rand.New(rand.NewPCG(seed, 7))
-		rules := Rules{StartCash: 300 + r.IntN(2000), Salary: r.IntN(300), StartProps: r.IntN(4), MaxRounds: 5 + r.IntN(40)}
+		rules := Rules{StartCash: 300 + r.IntN(2000), Salary: r.IntN(300), MaxRounds: 5 + r.IntN(40)}
 		g := newGame(2+r.IntN(7), rules, seed)
 		invariants(t, g)
 		for step := 0; g.Phase != PhaseOver; step++ {

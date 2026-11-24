@@ -148,7 +148,7 @@ function settingsForm(owner) {
       ${[['rounds', 'au nombre de tours'], ['time', 'au temps'], ['survivor', 'dernier survivant']].map(([v, l]) =>
         `<option value="${v}" ${s.end === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     ${num('rounds', 'tours')}${num('minutes', 'minutes')}<br>
-    ${num('startCash', 'argent de départ')}${num('salary', 'salaire')}${num('startProps', 'rues offertes')}<br>
+    ${num('startCash', 'argent de départ')}${num('salary', 'salaire')}<br>
     ${num('turnSeconds', 's par décision')}${num('auctionSeconds', 's par enchère')}
     ${owner ? '<br><button data-do="settings">Appliquer</button>' : ''}
   </div>`;

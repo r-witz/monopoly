@@ -160,7 +160,7 @@ func TestGameOverWebsocket(t *testing.T) {
 	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws"
 
 	a, b, c := dial(t, url, "token-alice"), dial(t, url, "token-bruno"), dial(t, url, "token-chloe")
-	a.send(map[string]any{"t": "create", "settings": map[string]any{"end": "rounds", "rounds": 8, "startProps": 2}})
+	a.send(map[string]any{"t": "create", "settings": map[string]any{"end": "rounds", "rounds": 8}})
 	code := a.until(func(m inMsg) bool { return m.T == "room" }).Code
 	for _, p := range []*bot{b, c} {
 		p.send(map[string]any{"t": "join", "code": code})
@@ -276,30 +276,28 @@ func TestTradeWebsocket(t *testing.T) {
 	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws"
 
 	a, b := dial(t, url, "token-alice"), dial(t, url, "token-bruno")
-	a.send(map[string]any{"t": "create", "settings": map[string]any{"startProps": 2}})
+	a.send(map[string]any{"t": "create"})
 	code := a.until(func(m inMsg) bool { return m.T == "room" }).Code
 	b.send(map[string]any{"t": "join", "code": code})
 	b.until(func(m inMsg) bool { return m.T == "room" })
 	a.send(map[string]any{"t": "start"})
 	st := a.until(func(m inMsg) bool { return m.T == "game" }).State
-	owned := func(v *engine.View, id uint32) (sq []int) {
-		for _, d := range v.Deeds {
-			if d.Owner == id {
-				sq = append(sq, d.Square)
-			}
-		}
-		return sq
+	cash := func(v *engine.View, id uint32) int {
+		return v.Players[slices.IndexFunc(v.Players, func(p engine.PlayerView) bool { return p.ID == id })].Cash
 	}
-	give, get := owned(st, a.id)[0], owned(st, b.id)[0]
-	a.send(map[string]any{"t": "act", "a": "offer", "offer": map[string]any{"to": b.id, "give": []int{give}, "get": []int{get}, "giveCash": 25}})
+	if len(st.Deeds) != 0 {
+		t.Fatalf("players start with properties: %+v", st.Deeds)
+	}
+	before := cash(st, a.id)
+	a.send(map[string]any{"t": "act", "a": "offer", "offer": map[string]any{"to": b.id, "giveCash": 25, "getCash": 10}})
 	offered := b.until(func(m inMsg) bool { return m.T == "game" && len(m.State.Trades) > 0 }).State.Trades[0]
 	if offered.From != a.id || offered.To != b.id || offered.GiveCash != 25 {
 		t.Fatalf("offer: %+v", offered)
 	}
 	b.send(map[string]any{"t": "act", "a": "accept", "trade": offered.ID})
 	after := a.until(func(m inMsg) bool { return m.T == "game" && len(m.State.Trades) == 0 }).State
-	if !slices.Contains(owned(after, b.id), give) || !slices.Contains(owned(after, a.id), get) {
-		t.Fatalf("after the trade: %+v", after.Deeds)
+	if cash(after, a.id) != before-15 {
+		t.Fatalf("after the trade: %d, want %d", cash(after, a.id), before-15)
 	}
 }
 

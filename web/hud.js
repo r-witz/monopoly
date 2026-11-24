@@ -128,10 +128,9 @@ function settingsForm(app, owner) {
         `<option value="${v}" ${s.end === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     ${s.end === 'rounds' ? num('rounds', 'Tours') : s.end === 'time' ? num('minutes', 'Minutes') : ''}
     ${num('startCash', 'Argent de départ', 100)}${num('salary', 'Salaire au Départ', 10)}
-    ${num('startProps', 'Rues offertes')}${num('max', 'Joueurs max')}
+    ${num('max', 'Joueurs max')}
     ${num('turnSeconds', 'Secondes par décision')}${num('auctionSeconds', 'Secondes par enchère')}
     <label class="check"><input type="checkbox" id="set-public" data-set="public" ${s.public ? 'checked' : ''} ${dis}> Salle publique</label>
-    ${owner ? '<button class="btn" data-do="settings">Enregistrer</button>' : ''}
   </div>`;
 }
 
@@ -172,13 +171,19 @@ function top(app) {
   </div>`;
 }
 
+// the color of a square's deed: its group's for a street
+const deedColor = s => s.kind === 'street' ? GROUP_COLORS[s.group] : '#2b2d42';
+
 function players(app) {
-  const { nm, colorOf, person } = names(app), g = app.game;
-  return g.players.map(p => `<div class="glass pc ${p.id === g.turn && g.phase !== 'over' ? 'turn' : ''} ${p.bankrupt ? 'out' : ''}">
+  const { nm, colorOf, person } = names(app), g = app.game, b = app.board;
+  const props = id => g.deeds.filter(d => d.owner === id).sort((x, y) => x.square - y.square).map(d => `<button class="prop ${d.mortgaged ? 'mort' : ''} ${d.square === app.selected ? 'on' : ''}"
+    style="--c:${deedColor(b.squares[d.square])}" data-do="pick" data-sq="${d.square}" title="${esc(b.squares[d.square].name)}"></button>`).join('');
+  return g.players.map(p => `<div class="glass pc ${p.id === g.turn && g.phase !== 'over' ? 'turn' : ''} ${p.bankrupt ? 'out' : ''} ${p.id === app.me ? 'me' : ''}">
     <i class="token" style="--c:${colorOf(p.id)}"></i>
-    <div class="grow"><b>${esc(nm(p.id))}${p.id === app.me ? ' <span class="you">toi</span>' : ''}</b>
-      <small>patrimoine ${fmt(p.worth)}${person(p.id)?.connected === false ? ' · absent' : ''}</small></div>
-    <div class="right">${money(p.cash)}<span class="badges">${p.inJail ? '🚓' : ''}${'🃏'.repeat(p.jailCards)}${p.bankrupt ? '💥' : ''}</span></div>
+    <div class="grow"><b><span class="nm">${esc(nm(p.id))}</span>${p.id === app.me ? '<span class="you">toi</span>' : ''}</b>
+      <small title="patrimoine : argent, propriétés et constructions"><span class="lbl">patrimoine </span>${fmt(p.worth)}</small></div>
+    <div class="right">${money(p.cash)}<span class="badges">${person(p.id)?.connected === false ? '<span title="absent">💤</span>' : ''}${p.inJail ? '🚓' : ''}${'🃏'.repeat(p.jailCards)}${p.bankrupt ? '💥' : ''}</span></div>
+    <div class="props">${props(p.id)}</div>
   </div>`).join('');
 }
 
@@ -187,39 +192,38 @@ function actions(app) {
   const me = g.players.find(p => p.id === app.me);
   const clock = '<span id="clock" class="clock"></span>';
   const btn = (a, label, cls = '') => `<button class="btn big ${cls}" data-do="act" data-a="${a}">${label}</button>`;
+  // what is happening, then the buttons: they wrap as one block
+  const box = (info, btns = '', cls = '') => `<div class="glass action ${cls}">${info ? '<span class="info">' + info + '</span>' : ''}${btns ? '<div class="btns">' + btns + clock + '</div>' : clock}</div>`;
   if (g.phase === 'over') {
-    return `<div class="glass action mine"><span>🏆 <b>${esc(nm(g.winner))}</b> gagne !</span>
-      <button class="btn" data-do="ranking">Classement</button><button class="btn big main" data-do="lobby">Retour au salon</button></div>`;
+    return box(`🏆 <b>${esc(nm(g.winner))}</b> gagne !`, '<button class="btn" data-do="ranking">Classement</button><button class="btn big main" data-do="lobby">Retour au salon</button>', 'mine');
   }
-  if (!me) return `<div class="glass action"><span>Tu regardes la partie. À <b>${esc(nm(g.turn))}</b> de jouer.</span>${clock}</div>`;
-  if (me.bankrupt) return `<div class="glass action"><span>Tu as fait faillite… La partie continue sans toi.</span></div>`;
+  if (!me) return box(`Tu regardes la partie. À <b>${esc(nm(g.turn))}</b> de jouer.`);
+  if (me.bankrupt) return box('Tu as fait faillite… La partie continue sans toi.');
   const mine = g.turn === app.me;
-  let body = '';
   switch (g.phase) {
     case 'roll':
-      if (mine) body = btn('roll', '🎲 Lancer les dés', 'main') + (me.inJail ? btn('payjail', 'Payer ' + b.jailFine) + (me.jailCards ? btn('jailcard', '🃏 Carte') : '') : '');
+      if (mine) return box('', btn('roll', '🎲 Lancer les dés', 'main') + (me.inJail ? btn('payjail', 'Payer ' + b.jailFine) + (me.jailCards ? btn('jailcard', '🃏 Carte') : '') : ''), 'mine');
       break;
     case 'buy': if (mine) {
       const s = b.squares[me.pos];
-      body = `<span>${esc(s.name)}</span>` + btn('buy', 'Acheter ' + money(s.price), 'main') + btn('decline', 'Mettre aux enchères');
+      return box(esc(s.name), btn('buy', 'Acheter ' + money(s.price), 'main') + btn('decline', 'Mettre aux enchères'), 'mine');
     } break;
     case 'auction': {
       const a = g.auction;
-      const head = `<span>🔨 <b>${esc(b.squares[a.square].name)}</b> · ${a.high ? money(a.high) + ' par ' + esc(nm(a.bidder)) : 'aucune offre'}</span>`;
-      if (a.passed.includes(app.me)) return `<div class="glass action">${head}<span class="muted">Tu as passé.</span>${clock}</div>`;
-      if (a.bidder === app.me) return `<div class="glass action">${head}<span class="lead">Tu mènes !</span>${clock}</div>`;
+      const head = `🔨 <b>${esc(b.squares[a.square].name)}</b> · ${a.high ? money(a.high) + ' par ' + esc(nm(a.bidder)) : 'aucune offre'}`;
+      if (a.passed.includes(app.me)) return box(head, '<span class="muted">Tu as passé.</span>');
+      if (a.bidder === app.me) return box(head, '<span class="lead">Tu mènes !</span>');
       const quick = [10, 50, 100].map(n => `<button class="btn" data-do="bidQuick" data-n="${n}">+${n}</button>`).join('');
-      return `<div class="glass action">${head}${quick}<input id="bid" class="field" type="number" data-bind="bid" value="${app.bid}">
-        <button class="btn big main" data-do="bid">Enchérir</button>${btn('pass', 'Passer')}${clock}</div>`;
+      return box(head, `${quick}<input id="bid" class="field" type="number" data-bind="bid" value="${app.bid}">
+        <button class="btn big main" data-do="bid">Enchérir</button>${btn('pass', 'Passer')}`);
     }
     case 'debt': if (mine) {
-      body = `<span>Tu dois <b>${fmt(g.debt.amount)}</b> à ${esc(nm(g.debt.to))} : vends ou hypothèque (clique tes cases), puis</span>` +
-        btn('pay', 'Payer', 'main') + btn('bankrupt', 'Faillite', 'danger');
+      return box(`Tu dois <b>${fmt(g.debt.amount)}</b> à ${esc(nm(g.debt.to))} : vends ou hypothèque (clique tes propriétés), puis`,
+        btn('pay', 'Payer', 'main') + btn('bankrupt', 'Faillite', 'danger'), 'mine');
     } break;
-    case 'end': if (mine) body = btn('end', 'Fin du tour ➜', 'main'); break;
+    case 'end': if (mine) return box('', btn('end', 'Fin du tour ➜', 'main'), 'mine');
   }
-  if (!body) body = `<span>À <b>${esc(nm(g.turn))}</b> de jouer…</span>`;
-  return `<div class="glass action ${mine ? 'mine' : ''}">${body}${clock}</div>`;
+  return box(`À <b>${esc(nm(g.turn))}</b> de jouer…`);
 }
 
 function deed(app) {
@@ -247,9 +251,9 @@ function deed(app) {
   }
   return `<div class="glass deedcard">
     <div class="deedhead" style="--c:${head}"><b>${esc(s.name)}</b>${s.price ? money(s.price) : ''}<button class="x" data-do="unselect">✕</button></div>
-    ${rows ? '<table>' + rows + '</table>' : ''}
     <div class="owner">${d ? `<i class="token" style="--c:${colorOf(d.owner)}"></i> ${esc(nm(d.owner))}${d.mortgaged ? ' · <b>hypothéquée</b>' : ''}` : s.price ? '<span class="muted">À vendre</span>' : ''}</div>
-    <div class="acts">${acts}</div>
+    ${acts ? '<div class="acts">' + acts + '</div>' : ''}
+    ${rows ? '<table>' + rows + '</table>' : ''}
   </div>`;
 }
 
@@ -294,8 +298,8 @@ export function overModal(app) {
   const medals = ['🥇', '🥈', '🥉'];
   return `<div class="panel modalbox podium">
     <h1 class="logo small">🏆 ${esc(nm(g.winner))} gagne !</h1>
-    ${g.ranking.map((id, i) => { const p = g.players.find(x => x.id === id); return `<div class="row rank"><span class="medal">${medals[i] || i + 1}</span>
-      <i class="token" style="--c:${colorOf(id)}"></i><b class="grow">${esc(nm(id))}</b>${p.bankrupt ? '<span class="muted">faillite</span>' : money(p.worth)}</div>`; }).join('')}
+    <div class="ranks">${g.ranking.map((id, i) => { const p = g.players.find(x => x.id === id); return `<div class="row rank"><span class="medal">${medals[i] || i + 1}</span>
+      <i class="token" style="--c:${colorOf(id)}"></i><b class="grow">${esc(nm(id))}</b>${p.bankrupt ? '<span class="muted">faillite</span>' : money(p.worth)}</div>`; }).join('')}</div>
     <div class="bar"><button class="btn" data-do="closeModal">Voir le plateau</button><button class="btn big main" data-do="lobby">Retour au salon</button></div>
   </div>`;
 }

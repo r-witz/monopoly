@@ -12,7 +12,6 @@ type settings struct {
 	Max            int    `json:"max"`            // connected players the room takes, 2 to maxPlayers
 	StartCash      int    `json:"startCash"`      // 500 to 5000
 	Salary         int    `json:"salary"`         // on passing the start, 0 to 1000
-	StartProps     int    `json:"startProps"`     // random streets dealt to each player, 0 to 3
 	End            string `json:"end"`            // "rounds": the richest after Rounds; "time": after Minutes; "survivor": the last one standing
 	Rounds         int    `json:"rounds"`         // 5 to 200
 	Minutes        int    `json:"minutes"`        // 5 to 240
@@ -22,7 +21,7 @@ type settings struct {
 
 // defaults are the settings of a room whose creator did not say.
 func defaults() settings {
-	return settings{Max: 6, StartCash: 1600, Salary: 180, StartProps: 2, End: "rounds", Rounds: 25, Minutes: 45,
+	return settings{Max: 6, StartCash: 1600, Salary: 180, End: "rounds", Rounds: 25, Minutes: 45,
 		TurnSeconds: 30, AuctionSeconds: 10}
 }
 
@@ -44,7 +43,6 @@ func (s *settings) clean() {
 	s.Max = clamp(s.Max, 2, maxPlayers)
 	s.StartCash = clamp(s.StartCash, 500, 5000)
 	s.Salary = clamp(s.Salary, 0, 1000)
-	s.StartProps = clamp(s.StartProps, 0, 3)
 	if s.End != "time" && s.End != "survivor" {
 		s.End = "rounds"
 	}

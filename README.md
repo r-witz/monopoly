@@ -86,8 +86,8 @@ arrête et exclut, anti-flood, écriture non bloquante. Le protocole est décrit
 
 ## Les règles (classique rapide)
 
-- 2 à 8 joueurs. Le propriétaire de la salle règle l'argent de départ, le salaire, de 0 à 3 rues
-  offertes au départ, la fin de partie et les minuteurs.
+- 2 à 8 joueurs. Chacun commence avec de l'argent seulement, sans aucune propriété. Le
+  propriétaire de la salle règle l'argent de départ, le salaire, la fin de partie et les minuteurs.
 - **Fin** : au bout de N tours de table (par défaut 25), au bout de N minutes, ou au dernier
   survivant. Dans les deux premiers cas, le plus riche gagne (cash + propriétés + constructions).
 - On lance 2 dés. Un double fait rejouer, trois doubles envoient au poste de police. Pour sortir :

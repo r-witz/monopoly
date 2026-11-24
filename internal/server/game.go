@@ -39,7 +39,7 @@ func (r *Room) startGame(t float64) string {
 		m.seat, ids[i] = i, m.s.id
 	}
 	r.play = r.settings
-	rules := engine.Rules{StartCash: r.play.StartCash, Salary: r.play.Salary, StartProps: r.play.StartProps}
+	rules := engine.Rules{StartCash: r.play.StartCash, Salary: r.play.Salary}
 	if r.play.End == "rounds" {
 		rules.MaxRounds = r.play.Rounds
 	}
