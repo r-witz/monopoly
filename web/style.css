@@ -186,8 +186,6 @@ input.code { text-align: center; letter-spacing: .16em; text-transform: uppercas
 .action .info { text-align: center; flex: 0 1 auto; }
 .action .btns { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 10px; }
 .action.mine { background: #fffbea; animation: glow 1.6s ease-in-out infinite; }
-.action .field { width: 96px; }
-.lead { color: #1a9e4a; font-weight: 800; }
 @keyframes glow { 50% { box-shadow: 0 4px 0 var(--ink), 0 0 0 6px rgba(255, 210, 63, .55); } }
 .clock { font: 700 16px 'DynaPuff', system-ui; min-width: 38px; text-align: right; color: #6b7685; }
 .clock:empty { display: none; }
