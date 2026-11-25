@@ -91,6 +91,10 @@ arrête et exclut, anti-flood, écriture non bloquante. Le protocole est décrit
   propriétaire de la salle règle l'argent de départ, le salaire, la fin de partie et les minuteurs.
 - **Fin** : au bout de N tours de table (par défaut 25), au bout de N minutes, ou au dernier
   survivant. Dans les deux premiers cas, le plus riche gagne (cash + propriétés + constructions).
+- **Victoire immédiate** (chacune activable dans les paramètres, toutes actives par défaut) :
+  posséder les 4 lignes de transport, 3 quartiers complets, ou tous les quartiers d'un même côté
+  du plateau termine la partie aussitôt, hypothéqués ou non. Vérifié à chaque achat, enchère,
+  échange accepté ou faillite qui donne des propriétés à un créancier.
 - On lance 2 dés. Un double fait rejouer, trois doubles envoient au poste de police. Pour sortir :
   faire un double, payer 50 ou jouer une carte. Après 3 essais, l'amende est due de toute façon.
 - **Case libre** : on l'achète, ou une enchère s'ouvre pour tous. Elle se ferme quand tout le

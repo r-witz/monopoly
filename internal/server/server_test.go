@@ -219,7 +219,7 @@ func TestGameOverWebsocket(t *testing.T) {
 		if v == nil || v.Phase != engine.PhaseOver || v.Winner == 0 {
 			t.Fatalf("bot %d ended on %+v", i, v)
 		}
-		if v.Round != 8 && slices.ContainsFunc(v.Players, func(p engine.PlayerView) bool { return !p.Bankrupt && p.ID != v.Winner }) {
+		if v.Round != 8 && v.WinBy == "" && slices.ContainsFunc(v.Players, func(p engine.PlayerView) bool { return !p.Bankrupt && p.ID != v.Winner }) {
 			t.Fatalf("over on round %d with several players in", v.Round)
 		}
 	}

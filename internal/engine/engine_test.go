@@ -125,7 +125,8 @@ func TestRandomGames(t *testing.T) {
 	}
 	for seed := range uint64(games) {
 		r := rand.New(rand.NewPCG(seed, 7))
-		rules := Rules{StartCash: 300 + r.IntN(2000), Salary: r.IntN(300), MaxRounds: 5 + r.IntN(40)}
+		rules := Rules{StartCash: 300 + r.IntN(2000), Salary: r.IntN(300), MaxRounds: 5 + r.IntN(40),
+			WinTransit: r.IntN(2) == 0, WinGroups: r.IntN(2) == 0, WinSide: r.IntN(2) == 0}
 		g := newGame(2+r.IntN(7), rules, seed)
 		invariants(t, g)
 		for step := 0; g.Phase != PhaseOver; step++ {
@@ -337,4 +338,98 @@ func TestBoardLayout(t *testing.T) {
 			t.Fatalf("card %q moves to a card square", c.Text)
 		}
 	}
+}
+
+var winRules = Rules{StartCash: 1500, Salary: 200, WinTransit: true, WinGroups: true, WinSide: true}
+
+// give hands these squares to seat p.
+func give(g *Game, p int, squares ...int) {
+	for _, sq := range squares {
+		g.Deeds[sq].Owner = p
+	}
+}
+
+// buyAt makes seat p buy square sq, as if p had just landed on it.
+func buyAt(t *testing.T, g *Game, p, sq int) []Event {
+	t.Helper()
+	g.Turn, g.Phase, g.Players[p].Pos = p, PhaseBuy, sq
+	return must(t, g, p, Action{Kind: "buy"})
+}
+
+// won checks the game is over, won by seat p by the instant win by, p first in the ranking.
+func won(t *testing.T, g *Game, ev []Event, p int, by string) {
+	t.Helper()
+	if g.Phase != PhaseOver || g.Winner != p || g.WinBy != by || g.Ranking()[0] != p {
+		t.Fatalf("phase %s, winner %d by %q, ranking %v; want seat %d by %q", g.Phase, g.Winner, g.WinBy, g.Ranking(), p, by)
+	}
+	if v := g.View(); v.WinBy != by || v.Ranking[0] != g.id(p) {
+		t.Fatalf("view: by %q, ranking %v", v.WinBy, v.Ranking)
+	}
+	if !slices.ContainsFunc(ev, func(e Event) bool { return e.Kind == "over" && e.By == by && e.Who == g.id(p) }) {
+		t.Fatalf("no over event by %q in %+v", by, ev)
+	}
+}
+
+func TestWinTransit(t *testing.T) {
+	g := newGame(2, winRules, 1)
+	g.Players[1].Cash += 100000 // richer: the instant win beats the worth
+	g.bank += 100000
+	give(g, 0, 5, 15, 25)
+	won(t, g, buyAt(t, g, 0, 35), 0, WinByTransit)
+	invariants(t, g)
+
+	g = newGame(2, Rules{StartCash: 1500, Salary: 200, WinGroups: true, WinSide: true}, 1)
+	give(g, 0, 5, 15, 25)
+	buyAt(t, g, 0, 35)
+	if g.Phase == PhaseOver {
+		t.Fatal("won with the transit lines, the rule off")
+	}
+}
+
+func TestWinGroups(t *testing.T) {
+	rules := Rules{StartCash: 1500, Salary: 200, WinGroups: true}
+	g := newGame(2, rules, 1)
+	give(g, 0, 1, 3, 11, 13, 14, 21, 23) // groups 1 and 3 whole, group 5 but square 24
+	give(g, 1, 24)
+	must(t, g, 0, Action{Kind: "offer", Offer: &Offer{To: 2, GiveCash: 300, Get: []int{24}}})
+	won(t, g, must(t, g, 1, Action{Kind: "accept", Trade: g.Trades[0].ID}), 0, WinByGroups)
+	invariants(t, g)
+
+	// 2 whole groups only: the game goes on
+	g = newGame(2, rules, 1)
+	give(g, 0, 1, 11, 13, 14)
+	buyAt(t, g, 0, 3)
+	if g.Phase == PhaseOver {
+		t.Fatal("won with 2 groups")
+	}
+}
+
+func TestWinSide(t *testing.T) {
+	g := newGame(3, Rules{StartCash: 1500, Salary: 200, WinSide: true}, 1)
+	give(g, 0, 1, 3, 6, 8) // the first side, but square 9
+	g.Turn, g.Phase, g.Players[0].Pos = 0, PhaseBuy, 9
+	must(t, g, 0, Action{Kind: "decline"})
+	must(t, g, 0, Action{Kind: "bid", Amount: 60})
+	must(t, g, 1, Action{Kind: "pass"})
+	won(t, g, must(t, g, 2, Action{Kind: "pass"}), 0, WinBySide)
+	invariants(t, g)
+
+	// a whole side with groups of two sides is not a side
+	g = newGame(2, Rules{StartCash: 1500, Salary: 200, WinSide: true}, 1)
+	give(g, 0, 1, 3, 6, 8, 11, 13)
+	buyAt(t, g, 0, 14)
+	if g.Phase == PhaseOver {
+		t.Fatal("won with a side not whole")
+	}
+}
+
+// A bankruptcy hands the creditor the last transit line: the creditor wins at once, though
+// several players are still in.
+func TestWinByBankruptcy(t *testing.T) {
+	g := newGame(3, winRules, 1)
+	give(g, 1, 5, 15, 25)
+	give(g, 0, 35)
+	g.Turn, g.Phase, g.Debt = 0, PhaseDebt, &Debt{Amount: 100000, To: 1, then: func() {}}
+	won(t, g, must(t, g, 0, Action{Kind: "bankrupt"}), 1, WinByTransit)
+	invariants(t, g)
 }

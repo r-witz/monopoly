@@ -17,12 +17,17 @@ type settings struct {
 	Minutes        int    `json:"minutes"`        // 5 to 240
 	TurnSeconds    int    `json:"turnSeconds"`    // to decide, 10 to 300, then the timer plays (engine.Game.Timeout)
 	AuctionSeconds int    `json:"auctionSeconds"` // without a new bid before an auction closes, 5 to 60
+	// Instant wins (engine.Rules): owning every transit line, 3 whole groups, or every street of
+	// a side of the board ends the game at once.
+	WinTransit bool `json:"winTransit"`
+	WinGroups  bool `json:"winGroups"`
+	WinSide    bool `json:"winSide"`
 }
 
 // defaults are the settings of a room whose creator did not say.
 func defaults() settings {
 	return settings{Max: 6, StartCash: 1500, Salary: 200, End: "rounds", Rounds: 25, Minutes: 45,
-		TurnSeconds: 30, AuctionSeconds: 10}
+		TurnSeconds: 30, AuctionSeconds: 10, WinTransit: true, WinGroups: true, WinSide: true}
 }
 
 // UnmarshalJSON reads the settings a client sent over the defaults: what it leaves out keeps its
