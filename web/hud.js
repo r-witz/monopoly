@@ -30,10 +30,7 @@ export function describe(app, e) {
     case 'debt': return w + ' doit trouver ' + e.amount;
     case 'paid': return w + ' paie ' + e.amount + ' à ' + t;
     case 'bought': return w + ' achète ' + s + ' (' + e.amount + ')';
-    case 'auction': return 'Enchère sur ' + s;
-    case 'bid': return w + ' enchérit ' + e.amount;
-    case 'pass': return w + ' passe';
-    case 'auctioned': return e.who ? w + ' remporte ' + s + ' (' + e.amount + ')' : s + ' : aucune offre';
+    case 'declined': return w + ' n\'achète pas ' + s;
     case 'built': return w + ' construit sur ' + s;
     case 'sold': return w + ' revend un niveau sur ' + s;
     case 'mortgaged': return w + ' hypothèque ' + s;
@@ -146,7 +143,7 @@ function homeScreen(app) {
 
 // the bounds of the numbers of the room, and the step of their − and + (the server keeps them in bounds too)
 export const LIMITS = { rounds: [5, 200, 5], minutes: [5, 240, 5], startCash: [500, 5000, 100], salary: [0, 1000, 20],
-  turnSeconds: [10, 300, 5], auctionSeconds: [5, 60, 1], max: [2, 8, 1] };
+  turnSeconds: [10, 300, 5], max: [2, 8, 1] };
 
 // stepper is a number of the settings: − and + around it for the owner, the number alone for the others
 function stepper(k, s, owner, unit = '') {
@@ -180,7 +177,6 @@ function settingsForm(app, owner) {
     row('Argent de départ', stepper('startCash', s, owner)),
     row('Salaire au Départ', stepper('salary', s, owner)),
     row('Temps pour décider', stepper('turnSeconds', s, owner, ' s'), 'puis le jeu joue à ta place'),
-    row('Temps par enchère', stepper('auctionSeconds', s, owner, ' s'), 'sans nouvelle offre'),
     ...WINS.map(([k, label, hint]) => row('🏆 ' + label, owner ? seg(k, [[true, 'Oui'], [false, 'Non']], s[k]) : `<span class="v">${s[k] ? 'Oui' : 'Non'}</span>`,
       'victoire immédiate : ' + hint)),
   ].join('');
@@ -303,21 +299,10 @@ function actions(app) {
       break;
     case 'buy': if (mine) {
       const s = b.squares[me.pos];
-      if (s.kind !== 'street') return box(esc(s.name), btn('buy', 'Acheter ' + money(s.price), 'main') + btn('decline', 'Mettre aux enchères'), 'mine');
+      if (s.kind !== 'street') return box(esc(s.name), btn('buy', 'Acheter ' + money(s.price), 'main') + btn('decline', 'Ne pas acheter'), 'mine');
       const later = me.lapped ? '' : ' <span class="muted">(3 maisons après ton premier passage au Départ)</span>';
-      return box(`<b>${esc(s.name)}</b> : le terrain, ou avec des maisons ?${later}`, levelButtons(b, me, me.pos, 'buy', 0, s.price) + btn('decline', 'Mettre aux enchères'), 'mine');
+      return box(`<b>${esc(s.name)}</b> : le terrain, ou avec des maisons ?${later}`, levelButtons(b, me, me.pos, 'buy', 0, s.price) + btn('decline', 'Ne pas acheter'), 'mine');
     } break;
-    case 'auction': {
-      const a = g.auction;
-      const head = `🔨 <b>${esc(b.squares[a.square].name)}</b> · ${a.high ? money(a.high) + ' par ' + esc(nm(a.bidder)) : 'mise à prix ' + money(a.min)}`;
-      if (a.passed.includes(app.me)) return box(head, '<span class="muted">Tu as passé.</span>');
-      if (a.bidder === app.me) return box(head, '<span class="lead">Tu mènes !</span>');
-      // With no bid yet, the quick bids start from the minimum: half the price.
-      const quick = (a.high ? [10, 50, 100] : [0, 50, 100]).map(n =>
-        `<button class="btn" data-do="bidQuick" data-n="${n}">${a.high ? '+' + n : fmt(a.min + n)}</button>`).join('');
-      return box(head, `${quick}<input id="bid" class="field" type="number" data-bind="bid" value="${app.bid}">
-        <button class="btn big main" data-do="bid">Enchérir</button>${btn('pass', 'Passer')}`);
-    }
     case 'debt': if (mine) {
       return box(`Tu dois <b>${fmt(g.debt.amount)}</b> à ${esc(nm(g.debt.to))} : vends ou hypothèque (clique tes propriétés), puis`,
         btn('pay', 'Payer', 'main') + btn('bankrupt', 'Faillite', 'danger'), 'mine');
@@ -421,7 +406,7 @@ export function rulesModal(app) {
   return `<div class="card modalbox rules">
     <h2>Comment on joue</h2>
     <ul>
-      <li><b>À ton tour</b>, lance les dés et avance. Sur une case libre, achète-la, ou elle part aux enchères pour tout le monde.</li>
+      <li><b>À ton tour</b>, lance les dés et avance. Sur une case libre, achète-la ou laisse-la : elle reste à vendre.</li>
       <li><b>Un double</b> (les deux dés pareils) : après ton déplacement, tu relances. Au <b>3ᵉ double d'affilée</b>, direction le poste de police, sans bouger.</li>
       <li><b>Au poste</b>, pour sortir : fais un double, paie ${b.jailFine} ou joue une carte. Après ${b.jailTurns} essais, l'amende est due.</li>
       <li><b>Maisons</b> : en achetant une rue, prends-la nue ou avec 1 ou 2 maisons (3 après ton premier passage au Départ). Ensuite, chaque fois que tu retombes sur ta rue, ajoute des maisons, sans avoir besoin de tout le groupe. La tour se construit sur une rue à 3 maisons, en y retombant.</li>

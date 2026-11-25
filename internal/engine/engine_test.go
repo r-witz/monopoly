@@ -55,10 +55,10 @@ func invariants(t *testing.T, g *Game) {
 	if want := len(g.Players)*g.Rules.StartCash + g.bank; sum != want {
 		t.Fatalf("cash %d, want %d: money appeared or vanished", sum, want)
 	}
-	if (g.Phase == PhaseDebt) != (g.Debt != nil) || (g.Phase == PhaseAuction) != (g.Auction != nil) {
-		t.Fatalf("phase %s with debt %v auction %v", g.Phase, g.Debt, g.Auction)
+	if (g.Phase == PhaseDebt) != (g.Debt != nil) {
+		t.Fatalf("phase %s with debt %v", g.Phase, g.Debt)
 	}
-	if g.Phase != PhaseOver && g.Phase != PhaseAuction && g.Players[g.Turn].Bankrupt {
+	if g.Phase != PhaseOver && g.Players[g.Turn].Bankrupt {
 		t.Fatalf("phase %s for bankrupt seat %d", g.Phase, g.Turn)
 	}
 	if d := g.Debt; d != nil && d.To >= 0 && g.Players[d.To].Bankrupt {
@@ -94,14 +94,13 @@ func invariants(t *testing.T, g *Game) {
 
 // randomAction is any action, legal or not, by any seat, with random arguments.
 func randomAction(g *Game, r *rand.Rand) (int, Action) {
-	kinds := []string{"roll", "roll", "roll", "buy", "buy", "decline", "bid", "pass", "pass", "build", "build", "sell",
+	kinds := []string{"roll", "roll", "roll", "buy", "buy", "decline", "build", "build", "sell",
 		"mortgage", "unmortgage", "pay", "pay", "bankrupt", "end", "end", "end", "offer", "accept", "reject", "cancel", "payjail", "jailcard", "bogus"}
 	p := r.IntN(len(g.Players))
 	if r.IntN(2) == 0 {
 		p = g.Turn
 	}
-	a := Action{Kind: kinds[r.IntN(len(kinds))], Square: r.IntN(len(g.Deeds)+2) - 1, Level: r.IntN(g.Board.MaxLevel+3) - 1,
-		Amount: r.IntN(g.Players[p].Cash+100) - 10}
+	a := Action{Kind: kinds[r.IntN(len(kinds))], Square: r.IntN(len(g.Deeds)+2) - 1, Level: r.IntN(g.Board.MaxLevel+3) - 1}
 	if a.Kind == "build" && r.IntN(2) == 0 {
 		a.Square = g.here // most random squares are not where the player stands
 	}
@@ -417,26 +416,17 @@ func TestTradeCheckedAgainOnAccept(t *testing.T) {
 	invariants(t, g)
 }
 
-func TestAuction(t *testing.T) {
+// Declining leaves the square free, with nobody to buy it, and the turn goes on.
+func TestDecline(t *testing.T) {
 	g := newGame(3, testRules, 1)
 	script(g, [2]int{1, 2})
 	must(t, g, 0, Action{Kind: "roll"}) // square 3, a street
-	must(t, g, 0, Action{Kind: "decline"})
-	if _, err := g.Apply(1, Action{Kind: "bid", Amount: 29}); err == nil {
-		t.Fatal("bid under half the price (60)")
+	ev := must(t, g, 0, Action{Kind: "decline"})
+	if !has(ev, "declined") || g.Deeds[3].Owner != -1 || g.Players[0].Cash != 1500 || g.Phase != PhaseEnd {
+		t.Fatalf("owner %d cash %d phase %s", g.Deeds[3].Owner, g.Players[0].Cash, g.Phase)
 	}
-	if v := g.View(); v.Auction.Min != 30 {
-		t.Fatalf("min bid %d, want 30", v.Auction.Min)
-	}
-	must(t, g, 1, Action{Kind: "bid", Amount: 30})
-	if _, err := g.Apply(1, Action{Kind: "build", Square: 3}); err == nil {
-		t.Fatal("built during an auction")
-	}
-	must(t, g, 2, Action{Kind: "bid", Amount: 31})
-	must(t, g, 0, Action{Kind: "pass"})
-	ev := must(t, g, 1, Action{Kind: "pass"})
-	if !has(ev, "auctioned") || g.Deeds[3].Owner != 2 || g.Players[2].Cash != 1500-31 || g.Phase != PhaseEnd {
-		t.Fatalf("owner %d cash %d phase %s", g.Deeds[3].Owner, g.Players[2].Cash, g.Phase)
+	if _, err := g.Apply(1, Action{Kind: "buy"}); err == nil {
+		t.Fatal("bought by another player")
 	}
 }
 
@@ -545,11 +535,7 @@ func TestWinGroups(t *testing.T) {
 func TestWinSide(t *testing.T) {
 	g := newGame(3, Rules{StartCash: 1500, Salary: 200, WinSide: true}, 1)
 	give(g, 0, 1, 3, 6, 8) // the first side, but square 9
-	g.Turn, g.Phase, g.Players[0].Pos = 0, PhaseBuy, 9
-	must(t, g, 0, Action{Kind: "decline"})
-	must(t, g, 0, Action{Kind: "bid", Amount: 60})
-	must(t, g, 1, Action{Kind: "pass"})
-	won(t, g, must(t, g, 2, Action{Kind: "pass"}), 0, WinBySide)
+	won(t, g, buyAt(t, g, 0, 9), 0, WinBySide)
 	invariants(t, g)
 
 	// a whole side with groups of two sides is not a side

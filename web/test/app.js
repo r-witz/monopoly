@@ -5,7 +5,7 @@
 const token = sessionStorage.token || (sessionStorage.token = crypto.randomUUID());
 let ws, me = 0, board = null, colors = [], room = null, game = null, seq = 0;
 let deadlineAt = 0, endsAt = 0, selected = -1, log = [], publicRooms = null;
-let bid = 0, trade = { to: 0, give: [], get: [], giveCash: 0, getCash: 0 }, draft = null;
+let trade = { to: 0, give: [], get: [], giveCash: 0, getCash: 0 }, draft = null;
 
 const groupColors = ['', '#8d5524', '#2ec4f1', '#ff6fb5', '#9b5de5', '#ff8a1f', '#f2c014', '#e63946', '#3a6ff7'];
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -46,8 +46,6 @@ function receive(m) {
       deadlineAt = m.deadline ? Date.now() + m.deadline : 0;
       endsAt = m.endsIn ? Date.now() + m.endsIn : 0;
       for (const e of m.events) log.unshift(describe(e));
-      if (game.auction && bid <= game.auction.high) bid = game.auction.high + 10;
-      if (game.auction && bid < game.auction.min) bid = game.auction.min;
       break;
     case 'stopped': game = null; log.unshift('La partie a été arrêtée.'); break;
     case 'left':
@@ -87,10 +85,7 @@ function describe(e) {
     case 'debt': return w + ' doit ' + e.amount + ' à ' + t + ' et doit trouver l\'argent';
     case 'paid': return w + ' paie ' + e.amount + ' à ' + t;
     case 'bought': return w + ' achète ' + s + ' pour ' + e.amount;
-    case 'auction': return 'Enchère sur ' + s;
-    case 'bid': return w + ' enchérit ' + e.amount;
-    case 'pass': return w + ' passe';
-    case 'auctioned': return e.who ? w + ' remporte ' + s + ' pour ' + e.amount : s + ' : aucune offre';
+    case 'declined': return w + ' n\'achète pas ' + s;
     case 'built': return w + ' construit sur ' + s + ' (niveau ' + e.level + ')';
     case 'sold': return w + ' revend un niveau sur ' + s + ' (+' + e.amount + ')';
     case 'mortgaged': return w + ' hypothèque ' + s + ' (+' + e.amount + ')';
@@ -150,7 +145,7 @@ function settingsForm(owner) {
         `<option value="${v}" ${s.end === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     ${num('rounds', 'tours')}${num('minutes', 'minutes')}<br>
     ${num('startCash', 'argent de départ')}${num('salary', 'salaire')}<br>
-    ${num('turnSeconds', 's par décision')}${num('auctionSeconds', 's par enchère')}<br>
+    ${num('turnSeconds', 's par décision')}<br>
     victoire immédiate :${[['winTransit', '4 lignes'], ['winGroups', '3 quartiers'], ['winSide', 'un côté']].map(([k, l]) =>
       ` <label><input type="checkbox" id="set-${k}" data-set="${k}" ${s[k] ? 'checked' : ''} ${dis}> ${l}</label>`).join('')}
     ${owner ? '<br><button data-do="settings">Appliquer</button>' : ''}
@@ -237,15 +232,7 @@ function actions() {
       const top = s.kind !== 'street' ? 0 : p.lapped ? board.maxLevel - 1 : Math.min(2, board.maxLevel - 1);
       let buys = '';
       for (let l = 0; l <= top; l++) buys += `<button ${l ? '' : 'class="main"'} data-do="act" data-a="buy" data-level="${l}">Acheter ${esc(s.name)}${l ? ' + ' + l + ' maison' + (l > 1 ? 's' : '') : ''} (${s.price + l * s.buildCost})</button>`;
-      return buys + b('decline', 'Refuser (enchère)');
-    }
-    case 'auction': {
-      const a = game.auction;
-      const head = `Enchère sur <b>${esc(sqName(a.square))}</b> : ${a.high ? a.high + ' par ' + esc(nm(a.bidder)) : 'mise à prix ' + a.min}<br>`;
-      if (a.passed.includes(me)) return head + '<span class="muted">Tu as passé.</span>';
-      if (a.bidder === me) return head + '<span class="muted">Tu mènes.</span>';
-      return head + `<input type="number" id="bid" data-bind="bid" value="${bid}">` +
-        '<button class="main" data-do="bid">Enchérir</button>' + b('pass', 'Passer');
+      return buys + b('decline', 'Ne pas acheter');
     }
     case 'debt':
       if (!myTurn) break;
@@ -339,7 +326,6 @@ const handlers = {
   back() { game = null; render(); },
   select(d) { selected = +d.sq; render(); },
   act: d => act(d.a, { square: d.sq ? +d.sq : 0, level: d.level ? +d.level : 0, trade: d.trade ? +d.trade : 0 }),
-  bid: () => act('bid', { amount: bid }),
   offer() {
     const { to, give, get, giveCash, getCash } = trade;
     act('offer', { offer: { to, give, get, giveCash, getCash } });
@@ -356,8 +342,7 @@ document.addEventListener('click', e => {
 document.addEventListener('toggle', e => { if (e.target.dataset.do === 'toggleTrade') trade.open = e.target.open; }, true);
 document.addEventListener('input', e => {
   const t = e.target, b = t.dataset;
-  if (b.bind === 'bid') bid = +t.value;
-  else if (b.bind === 'giveCash' || b.bind === 'getCash') trade[b.bind] = +t.value;
+  if (b.bind === 'giveCash' || b.bind === 'getCash') trade[b.bind] = +t.value;
   else if (b.set && draft) draft[b.set] = t.type === 'checkbox' ? t.checked : t.type === 'number' ? +t.value : t.value;
 });
 document.addEventListener('change', e => {
@@ -372,7 +357,6 @@ document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
   if (e.target.id === 'name') handlers.name();
   if (e.target.id === 'code') handlers.join();
-  if (e.target.id === 'bid') handlers.bid();
 });
 
 connect();

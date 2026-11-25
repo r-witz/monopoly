@@ -11,12 +11,11 @@ import (
 type Phase string
 
 const (
-	PhaseRoll    Phase = "roll"    // the current player rolls (in jail: or pays, or uses a card)
-	PhaseBuy     Phase = "buy"     // the current player buys the square they are on (a street with houses), or declines: an auction
-	PhaseAuction Phase = "auction" // every player still in may bid until all but the highest bidder passed
-	PhaseDebt    Phase = "debt"    // the current player raises the cash they owe, then pays, or goes bankrupt
-	PhaseEnd     Phase = "end"     // the current player may still manage, then ends the turn
-	PhaseOver    Phase = "over"
+	PhaseRoll Phase = "roll" // the current player rolls (in jail: or pays, or uses a card)
+	PhaseBuy  Phase = "buy"  // the current player buys the square they are on (a street with houses), or declines: it stays free
+	PhaseDebt Phase = "debt" // the current player raises the cash they owe, then pays, or goes bankrupt
+	PhaseEnd  Phase = "end"  // the current player may still manage, then ends the turn
+	PhaseOver Phase = "over"
 )
 
 // Rules are the numbers a room chooses for a game.
@@ -42,7 +41,6 @@ type Action struct {
 	Kind   string `json:"a"`      // see Apply
 	Square int    `json:"square"` // build, sell, mortgage, unmortgage
 	Level  int    `json:"level"`  // buy: the houses bought with the street; build: the level to build up to
-	Amount int    `json:"amount"` // bid
 	Offer  *Offer `json:"offer"`  // offer
 	Trade  int    `json:"trade"`  // accept, reject, cancel: the trade's ID
 }
@@ -77,13 +75,6 @@ type Deed struct {
 	Mortgaged bool
 }
 
-type Auction struct {
-	Square int
-	High   int    // the highest bid, 0 for none
-	Bidder int    // its seat, -1 for none
-	Passed []bool // by seat: out of this auction
-}
-
 // Debt is what the current player owes and cannot pay yet. To is a seat, -1 for the bank.
 type Debt struct {
 	Amount int
@@ -102,12 +93,11 @@ type Game struct {
 	Phase   Phase
 	Dice    [2]int // the last roll
 	Doubles int    // in a row, this turn
-	Auction *Auction
 	Debt    *Debt
 	Trades  []*Trade
 	Winner  int    // seat, -1 before the end (and when the game was stopped with nobody in)
 	WinBy   string // an instant win (WinByTransit…), "" when the richest won
-	// Step changes whenever the decision the game waits for changes (and on every bid): a timer
+	// Step changes whenever the decision the game waits for changes: a timer
 	// started for one step is void once Step moved on.
 	Step int
 
@@ -171,15 +161,13 @@ func (g *Game) seat(id uint32) int {
 //	roll                     the current player, PhaseRoll
 //	payjail, jailcard        leave the police station before rolling: pay the fine, or use a card
 //	buy (level), decline     PhaseBuy: the square the current player is on, a street with level houses (0 to 2, 3 once
-//	                         the player has passed the start, never the tower); decline starts an auction, of the bare square
-//	bid (amount), pass       PhaseAuction: any player still in it; a bid beats the highest, is at least half the price, within
-//	                         the bidder's cash; who passed is out of this auction
+//	                         the player has passed the start, never the tower); declined, it stays free
 //	build (square, level)    the current player, PhaseRoll or PhaseEnd, on the street of theirs they just
 //	                         landed on (not mortgaged; the group need not be whole): up to level, once per
 //	                         landing. Houses up to 2, 3 once the player has passed the start; the tower only
 //	                         on a street that already had 3 houses
 //	sell (square)            one level of a street, at any time
-//	mortgage, unmortgage     at any time, not while an auction runs or the player owes (unmortgage); a
+//	mortgage, unmortgage     at any time, not while the player owes (unmortgage); a
 //	                         street only with no building on it
 //	pay, bankrupt            PhaseDebt: pay what is owed, or give up: everything goes to the creditor
 //	end                      PhaseEnd: the next player's turn
@@ -207,10 +195,6 @@ func (g *Game) Apply(p int, a Action) ([]Event, error) {
 		err = g.buy(p, a.Level)
 	case "decline":
 		err = g.decline(p)
-	case "bid":
-		err = g.bid(p, a.Amount)
-	case "pass":
-		err = g.pass(p)
 	case "build":
 		err = g.build(p, a.Square, a.Level)
 	case "sell":
@@ -248,8 +232,7 @@ func (g *Game) Apply(p int, a Action) ([]Event, error) {
 }
 
 // Timeout plays what the rules do when the player who must decide does not: roll, decline,
-// close the auction, raise the cash owed by selling and mortgaging (or go bankrupt), end the
-// turn. It always moves the game on.
+// raise the cash owed by selling and mortgaging (or go bankrupt), end the turn. It always moves the game on.
 func (g *Game) Timeout() []Event {
 	g.events = nil
 	switch g.Phase {
@@ -257,8 +240,6 @@ func (g *Game) Timeout() []Event {
 		g.roll(g.Turn)
 	case PhaseBuy:
 		g.decline(g.Turn)
-	case PhaseAuction:
-		g.closeAuction()
 	case PhaseDebt:
 		g.liquidate(g.Turn, g.Debt.Amount)
 		if g.payDebt(g.Turn) != nil {
@@ -295,7 +276,7 @@ func (g *Game) Finish() []Event {
 
 // finish ends the game: winner wins by an instant win (by), or with -1 the richest wins.
 func (g *Game) finish(winner int, by string) {
-	g.Auction, g.Debt, g.Trades = nil, nil, nil
+	g.Debt, g.Trades = nil, nil
 	g.setPhase(PhaseOver)
 	g.Winner, g.WinBy = winner, by
 	if winner < 0 {
