@@ -166,9 +166,9 @@ const END = [['rounds', 'Tours'], ['time', 'Temps'], ['survivor', 'Survivant']];
 
 // the instant wins: what owning ends the game at once, by the setting that turns it on
 const WINS = [['winTransit', '4 lignes de transport', 'les posséder toutes'], ['winGroups', '3 quartiers complets', 'trois groupes de couleur entiers'],
-  ['winSide', 'Un côté complet', 'tous les quartiers d'un même côté du plateau']];
+  ['winSide', 'Un côté complet', "tous les quartiers d'un même côté du plateau"]];
 // WIN_BY says how an instant win was won, by the reason the server gives (winBy)
-export const WIN_BY = { transit: 'toutes les lignes de transport', groups: '3 quartiers complets', side: 'tous les quartiers d'un côté' };
+export const WIN_BY = { transit: 'toutes les lignes de transport', groups: '3 quartiers complets', side: "tous les quartiers d'un côté" };
 const END_HINT = { rounds: 'le plus riche après N tours de table', time: 'le plus riche quand le temps est écoulé', survivor: 'le dernier à ne pas avoir fait faillite' };
 
 function settingsForm(app, owner) {

@@ -433,3 +433,22 @@ func TestWinByBankruptcy(t *testing.T) {
 	won(t, g, must(t, g, 0, Action{Kind: "bankrupt"}), 1, WinByTransit)
 	invariants(t, g)
 }
+
+// A player in debt who gets the last transit line by a trade does not win before paying: the
+// win would wipe the debt out.
+func TestNoWinInDebt(t *testing.T) {
+	g := newGame(3, winRules, 1)
+	give(g, 0, 5, 15, 25)
+	give(g, 2, 35)
+	g.Turn, g.Phase, g.Debt = 0, PhaseDebt, &Debt{Amount: 200, To: 1, then: g.settle}
+	must(t, g, 2, Action{Kind: "offer", Offer: &Offer{To: 1, Give: []int{35}}})
+	must(t, g, 0, Action{Kind: "accept", Trade: g.Trades[0].ID})
+	if g.Phase != PhaseDebt || g.Deeds[35].Owner != 0 {
+		t.Fatalf("won in debt: phase %s, owner %d", g.Phase, g.Deeds[35].Owner)
+	}
+	won(t, g, must(t, g, 0, Action{Kind: "pay"}), 0, WinByTransit)
+	if g.Players[1].Cash != 1500+200 {
+		t.Fatalf("creditor cash %d, the debt was not paid", g.Players[1].Cash)
+	}
+	invariants(t, g)
+}

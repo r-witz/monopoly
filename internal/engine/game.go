@@ -299,10 +299,11 @@ func (g *Game) finish(winner int, by string) {
 }
 
 // checkWin ends the game when one of the players ps, in that order, owns what an instant win of
-// the rules asks for, and says whether it did.
+// the rules asks for, and says whether it did. A player who owes money cannot win before paying
+// it (payDebt checks again then): winning would wipe the debt out.
 func (g *Game) checkWin(ps ...int) bool {
 	for _, p := range ps {
-		if p < 0 || g.Players[p].Bankrupt {
+		if p < 0 || g.Players[p].Bankrupt || g.Debt != nil && p == g.Turn {
 			continue
 		}
 		if by := g.instantWin(p); by != "" {
