@@ -103,7 +103,7 @@ type Game struct {
 	Auction *Auction
 	Debt    *Debt
 	Trades  []*Trade
-	Winner  int // seat, -1 before the end (and when the game was stopped with nobody in)
+	Winner  int    // seat, -1 before the end (and when the game was stopped with nobody in)
 	WinBy   string // an instant win (WinByTransit…), "" when the richest won
 	// Step changes whenever the decision the game waits for changes (and on every bid): a timer
 	// started for one step is void once Step moved on.
