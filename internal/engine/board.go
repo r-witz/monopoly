@@ -21,7 +21,7 @@ const (
 type Square struct {
 	Kind      Kind   `json:"kind"`
 	Name      string `json:"name"`
-	Group     int    `json:"group,omitempty"`     // streets: 1 to 6, the set to own whole to build
+	Group     int    `json:"group,omitempty"`     // streets: 1 to 8, the set to own whole to build
 	Price     int    `json:"price,omitempty"`     // streets, transit, utilities
 	Rent      []int  `json:"rent,omitempty"`      // streets: by level, 0 (bare) to MaxLevel
 	BuildCost int    `json:"buildCost,omitempty"` // streets: one level; sold back for half
@@ -89,41 +89,53 @@ func street(name string, group, price int) Square {
 	return Square{Kind: KindStreet, Name: name, Group: group, Price: price, Rent: rent, BuildCost: (price/2 + 5) / 10 * 10}
 }
 
-// Classic is the board of Quartiers: 32 squares, a fictional harbour town.
+// Classic is the board of Quartiers: 40 squares, a fictional harbour town. Four corners and four
+// sides of 9 squares; the streets of a group are all on the same side.
 var Classic = &Board{
 	Squares: []Square{
 		{Kind: KindStart, Name: "Départ"},
-		street("Ruelle des Tanneurs", 1, 70),
+		street("Ruelle des Tanneurs", 1, 60),
 		{Kind: KindCard, Name: "Rumeur"},
-		street("Impasse du Lavoir", 1, 90),
+		street("Impasse du Lavoir", 1, 80),
 		{Kind: KindTax, Name: "Taxe foncière", Tax: 120},
 		{Kind: KindTransit, Name: "Ligne Nord", Price: 180},
-		street("Rue des Ateliers", 2, 120),
-		street("Rue du Marché", 2, 120),
+		street("Rue des Ateliers", 2, 100),
+		{Kind: KindCard, Name: "Rumeur"},
+		street("Rue du Marché", 2, 100),
+		street("Place des Halles", 2, 120),
+
 		{Kind: KindJail, Name: "Poste de police"},
-		street("Place des Halles", 2, 140),
+		street("Quai des Pêcheurs", 3, 140),
 		{Kind: KindUtility, Name: "Compagnie des eaux", Price: 140},
-		street("Quai des Pêcheurs", 3, 180),
-		street("Rue du Port", 3, 180),
+		street("Rue du Port", 3, 140),
+		street("Avenue du Phare", 3, 160),
 		{Kind: KindTransit, Name: "Ligne Est", Price: 180},
+		street("Rue des Remparts", 4, 180),
 		{Kind: KindCard, Name: "Rumeur"},
-		street("Avenue du Phare", 3, 200),
+		street("Porte Saint-Clair", 4, 180),
+		street("Montée du Château", 4, 200),
+
 		{Kind: KindRest, Name: "Jardin public"},
-		street("Boulevard des Arts", 4, 240),
+		street("Boulevard des Arts", 5, 220),
 		{Kind: KindCard, Name: "Rumeur"},
-		street("Rue du Théâtre", 4, 240),
-		street("Place de l'Opéra", 4, 260),
+		street("Rue du Théâtre", 5, 220),
+		street("Place de l'Opéra", 5, 240),
 		{Kind: KindTransit, Name: "Ligne Sud", Price: 180},
-		street("Cours des Tilleuls", 5, 300),
+		street("Rue de la Bibliothèque", 6, 260),
+		street("Place de l'Université", 6, 260),
 		{Kind: KindUtility, Name: "Centrale électrique", Price: 140},
+		street("Avenue des Sciences", 6, 280),
+
 		{Kind: KindGoToJail, Name: "Au poste !"},
-		street("Avenue des Platanes", 5, 300),
-		street("Allée des Cèdres", 5, 320),
+		street("Cours des Tilleuls", 7, 300),
+		street("Avenue des Platanes", 7, 300),
+		{Kind: KindCard, Name: "Rumeur"},
+		street("Allée des Cèdres", 7, 320),
 		{Kind: KindTransit, Name: "Ligne Ouest", Price: 180},
 		{Kind: KindCard, Name: "Rumeur"},
-		street("Esplanade du Belvédère", 6, 380),
+		street("Esplanade du Belvédère", 8, 360),
 		{Kind: KindTax, Name: "Contravention", Tax: 80},
-		street("Colline des Ambassades", 6, 420),
+		street("Colline des Ambassades", 8, 400),
 	},
 	Cards: []Card{
 		{Text: "Votre start-up lève des fonds : recevez 150.", Effect: Collect, Amount: 150},
@@ -132,8 +144,8 @@ var Classic = &Board{
 		{Text: "Facture du vétérinaire : payez 80.", Effect: Pay, Amount: 80},
 		{Text: "Trottinette sur le trottoir : payez 40.", Effect: Pay, Amount: 40},
 		{Text: "Retour au Départ.", Effect: MoveTo, Square: 0},
-		{Text: "Balade jusqu'à l'Esplanade du Belvédère.", Effect: MoveTo, Square: 29},
-		{Text: "Pique-nique au Jardin public.", Effect: MoveTo, Square: 16},
+		{Text: "Balade jusqu'à l'Esplanade du Belvédère.", Effect: MoveTo, Square: 37},
+		{Text: "Pique-nique au Jardin public.", Effect: MoveTo, Square: 20},
 		{Text: "Prenez la ligne la plus proche.", Effect: NextTransit},
 		{Text: "Demi-tour ! Reculez de 3 cases.", Effect: MoveBy, Amount: -3},
 		{Text: "Contrôle surprise : direction le poste.", Effect: ToJail},
@@ -141,7 +153,7 @@ var Classic = &Board{
 		{Text: "C'est votre tournée : payez 20 à chaque joueur.", Effect: PayEach, Amount: 20},
 		{Text: "Ravalement de façades : payez 25 par maison et 100 par tour.", Effect: Repairs, PerHouse: 25, PerTower: 100},
 	},
-	Jail:          8,
+	Jail:          10,
 	JailFine:      60,
 	JailTurns:     3,
 	MaxLevel:      4,

@@ -283,20 +283,55 @@ func TestAuction(t *testing.T) {
 	script(g, [2]int{1, 2})
 	must(t, g, 0, Action{Kind: "roll"}) // square 3, a street
 	must(t, g, 0, Action{Kind: "decline"})
-	if _, err := g.Apply(1, Action{Kind: "bid", Amount: 44}); err == nil {
-		t.Fatal("bid under half the price (90)")
+	if _, err := g.Apply(1, Action{Kind: "bid", Amount: 39}); err == nil {
+		t.Fatal("bid under half the price (80)")
 	}
-	if v := g.View(); v.Auction.Min != 45 {
-		t.Fatalf("min bid %d, want 45", v.Auction.Min)
+	if v := g.View(); v.Auction.Min != 40 {
+		t.Fatalf("min bid %d, want 40", v.Auction.Min)
 	}
-	must(t, g, 1, Action{Kind: "bid", Amount: 45})
+	must(t, g, 1, Action{Kind: "bid", Amount: 40})
 	if _, err := g.Apply(1, Action{Kind: "build", Square: 3}); err == nil {
 		t.Fatal("built during an auction")
 	}
-	must(t, g, 2, Action{Kind: "bid", Amount: 46})
+	must(t, g, 2, Action{Kind: "bid", Amount: 41})
 	must(t, g, 0, Action{Kind: "pass"})
 	ev := must(t, g, 1, Action{Kind: "pass"})
-	if !has(ev, "auctioned") || g.Deeds[3].Owner != 2 || g.Players[2].Cash != 1500-46 || g.Phase != PhaseEnd {
+	if !has(ev, "auctioned") || g.Deeds[3].Owner != 2 || g.Players[2].Cash != 1500-41 || g.Phase != PhaseEnd {
 		t.Fatalf("owner %d cash %d phase %s", g.Deeds[3].Owner, g.Players[2].Cash, g.Phase)
+	}
+}
+
+// TestBoardLayout: four corners and four sides of 9 squares, and every group on a single side.
+func TestBoardLayout(t *testing.T) {
+	b := Classic
+	if len(b.Squares) != 40 {
+		t.Fatalf("%d squares, want 40", len(b.Squares))
+	}
+	corners := []Kind{KindStart, KindJail, KindRest, KindGoToJail}
+	for side, k := range corners {
+		if b.Squares[side*10].Kind != k {
+			t.Fatalf("square %d is %s, want the corner %s", side*10, b.Squares[side*10].Kind, k)
+		}
+	}
+	if b.Squares[b.Jail].Kind != KindJail {
+		t.Fatal("Jail is not the police station")
+	}
+	sides := map[int]int{}
+	for i, s := range b.Squares {
+		if s.Kind != KindStreet {
+			continue
+		}
+		if side, ok := sides[s.Group]; ok && side != i/10 {
+			t.Fatalf("group %d on sides %d and %d", s.Group, side, i/10)
+		}
+		sides[s.Group] = i / 10
+	}
+	if len(sides) != 8 {
+		t.Fatalf("%d groups, want 8", len(sides))
+	}
+	for _, c := range b.Cards {
+		if c.Effect == MoveTo && b.Squares[c.Square].Kind == KindCard {
+			t.Fatalf("card %q moves to a card square", c.Text)
+		}
 	}
 }

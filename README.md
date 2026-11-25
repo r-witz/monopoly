@@ -4,8 +4,9 @@ Jeu de plateau multijoueur dans le navigateur : on achète des rues, on encaisse
 construit, on négocie, en version « classique rapide ». Ce dépôt contient **le serveur Go, le
 moteur de règles** et **le client 3D** (`web/`), plus un client de test brut (`web/test/`).
 
-Le plateau, les noms, les prix et les cartes sont propres au jeu : 32 cases, une ville portuaire
-fictive, 6 groupes de rues, 4 lignes de transport, 2 compagnies et un paquet de cartes « Rumeur ».
+Le plateau, les noms, les prix et les cartes sont propres au jeu : 40 cases (4 coins et 4 côtés de 9,
+chaque groupe sur un seul côté), une ville portuaire fictive, 8 groupes de rues, 4 lignes de
+transport, 2 compagnies et un paquet de cartes « Rumeur ».
 
 ## Lancer
 

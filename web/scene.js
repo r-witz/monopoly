@@ -4,7 +4,7 @@
 // movePawn…): main.js decides when.
 import * as THREE from './vendor/three.module.min.js';
 
-export const GROUP_COLORS = ['', '#a0603a', '#2ec4f1', '#ff5fa2', '#ff8a1f', '#e63946', '#3a5bd9'];
+export const GROUP_COLORS = ['', '#a0603a', '#2ec4f1', '#ff5fa2', '#9b5de5', '#ff8a1f', '#f2c014', '#e63946', '#3a5bd9'];
 const INK = 0x1d2a3a;
 const PAL = {
   cream: 0xfff8e8, board: 0xf6ecd2, wood: 0xb07a4f, wood2: 0x8a5a3c, grass: 0x7ccf6a, grass2: 0x5bb85a,
@@ -44,13 +44,15 @@ function mesh(geometry, material, { shadow = true, receive = false } = {}) {
 // --- geometry of the board -------------------------------------------------------------------
 
 const CORNER = 1.6, TILE_W = 1, TILE_D = 1.6;
-const HALF = CORNER + 3.5 * TILE_W; // half the side of the board
+const SIDE = 10; // squares per side: a corner, then 9 tiles
+const HALF = CORNER + (SIDE - 1) / 2 * TILE_W; // half the side of the board
+const GROW = HALF / 5.1; // the scenery around the board was laid out for a board of half 5.1
 const TOP = 0.16; // height of a tile's face above the board
 
 // frame places square i: the frame of side 0 (the bottom edge, from right to left, outward +z)
 // turned to its side. Corners are the first square of each side.
 function frame(i) {
-  const side = Math.floor(i / 8), k = i % 8;
+  const side = Math.floor(i / SIDE), k = i % SIDE;
   const rot = [0, -Math.PI / 2, Math.PI, Math.PI / 2][side];
   const x = k === 0 ? HALF - CORNER / 2 : HALF - CORNER - (k - 0.5) * TILE_W;
   const z = k === 0 ? HALF - CORNER / 2 : HALF - TILE_D / 2;
@@ -334,7 +336,7 @@ export class Scene {
     sun.position.set(-7, 14, 8);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
-    Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 40 });
+    Object.assign(sun.shadow.camera, { left: -9 * GROW, right: 9 * GROW, top: 9 * GROW, bottom: -9 * GROW, near: 1, far: 40 });
     sun.shadow.bias = -0.0005;
     scene.add(new THREE.HemisphereLight(0xffffff, 0x9fd0e6, 1.35), sun);
 
@@ -346,8 +348,8 @@ export class Scene {
     this.cash = new Map();
 
     // camera: orbit around a target that follows the action
-    this.view = { az: 0, polar: 0.92, dist: 17.5, target: new THREE.Vector3() };
-    this.goal = { az: 0, polar: 0.92, dist: 17.5, target: new THREE.Vector3() };
+    this.view = { az: 0, polar: 0.92, dist: 17.5 * GROW, target: new THREE.Vector3() };
+    this.goal = { az: 0, polar: 0.92, dist: 17.5 * GROW, target: new THREE.Vector3() };
     this.idle = true;
     this.controls(canvasEl);
     this.resize();
@@ -382,33 +384,33 @@ export class Scene {
     sea.rotation.x = -Math.PI / 2;
     sea.position.y = -1.2;
     s.add(sea);
-    this.foam = mesh(new THREE.RingGeometry(11.2, 12, 64), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 }), { shadow: false });
+    this.foam = mesh(new THREE.RingGeometry(11.2 * GROW, 12 * GROW, 64), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 }), { shadow: false });
     this.foam.rotation.x = -Math.PI / 2;
     this.foam.position.y = -1.18;
     s.add(this.foam);
     // the island: sand, then grass, the board on it
-    const sand = mesh(new THREE.CylinderGeometry(11, 11.8, 1, 48), soft(PAL.sand), { receive: true });
+    const sand = mesh(new THREE.CylinderGeometry(11 * GROW, 11.8 * GROW, 1, 48), soft(PAL.sand), { receive: true });
     sand.position.y = -1.2;
-    const grass = mesh(new THREE.CylinderGeometry(9.4, 10.2, 0.5, 48), toon(PAL.grass2), { receive: true });
+    const grass = mesh(new THREE.CylinderGeometry(9.4 * GROW, 10.2 * GROW, 0.5, 48), toon(PAL.grass2), { receive: true });
     grass.position.y = -0.55;
     s.add(sand, grass);
     for (let i = 0; i < 14; i++) {
       const a = (i / 14) * Math.PI * 2 + Math.random() * 0.2;
       if (i % 2) {
         const p = palm(0.9 + Math.random() * 0.4);
-        p.position.set(Math.cos(a) * 10.4, -0.7, Math.sin(a) * 10.4);
+        p.position.set(Math.cos(a) * 10.4 * GROW, -0.7, Math.sin(a) * 10.4 * GROW);
         p.rotation.y = -a;
         s.add(p);
       } else {
         const t = tree(1 + Math.random() * 0.6, Math.random() < 0.5);
-        t.position.set(Math.cos(a) * 8.6, -0.3, Math.sin(a) * 8.6);
+        t.position.set(Math.cos(a) * 8.6 * GROW, -0.3, Math.sin(a) * 8.6 * GROW);
         s.add(t);
       }
     }
     for (let i = 0; i < 9; i++) {
       const rock = outline(mesh(new THREE.DodecahedronGeometry(0.3 + Math.random() * 0.4, 0), toon(PAL.stone)), 1.05);
       const a = Math.random() * Math.PI * 2;
-      rock.position.set(Math.cos(a) * 11.6, -0.9, Math.sin(a) * 11.6);
+      rock.position.set(Math.cos(a) * 11.6 * GROW, -0.9, Math.sin(a) * 11.6 * GROW);
       rock.rotation.set(Math.random(), Math.random(), Math.random());
       s.add(rock);
     }
@@ -439,14 +441,14 @@ export class Scene {
     s.add(park);
     const pond = mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.04, 32), soft(PAL.water), { shadow: false, receive: true });
     pond.scale.set(1.3, 1, 0.8);
-    pond.position.set(-2.1, 0.14, -2);
+    pond.position.set(-2.1 * GROW, 0.14, -2 * GROW);
     s.add(pond);
     const lh = lighthouse();
-    lh.position.set(2.5, 0.13, -2.4);
+    lh.position.set(2.5 * GROW, 0.13, -2.4 * GROW);
     s.add(lh);
     for (const [x, z, sc] of [[-2.8, 0.6, 0.9], [-2.6, 1.6, 0.7], [2.7, 1.2, 0.8], [2.2, 2.7, 0.7], [-1.2, -2.8, 0.75], [0.4, -2.9, 0.65], [2.9, -0.9, 0.7], [-2.9, 2.8, 0.8]]) {
       const t = tree(sc, Math.random() < 0.5);
-      t.position.set(x, 0.13, z);
+      t.position.set(x * GROW, 0.13, z * GROW);
       s.add(t);
     }
     // the name, written on the lawn
@@ -562,7 +564,7 @@ export class Scene {
     });
     el.addEventListener('wheel', e => {
       e.preventDefault();
-      this.goal.dist = Math.min(30, Math.max(7, this.goal.dist * (1 + Math.sign(e.deltaY) * 0.1)));
+      this.goal.dist = Math.min(30 * GROW, Math.max(7, this.goal.dist * (1 + Math.sign(e.deltaY) * 0.1)));
       this.manualAt = performance.now();
     }, { passive: false });
   }
@@ -582,7 +584,7 @@ export class Scene {
   overview() {
     if (performance.now() - (this.manualAt || -1e9) < 4000) return; // the player is looking around
     this.goal.target.set(0, 0, 0);
-    this.goal.dist = 17.5;
+    this.goal.dist = 17.5 * GROW;
   }
 
   // home stops the slow turn of the lobby and faces the start, from the nearest way round
@@ -591,7 +593,7 @@ export class Scene {
     this.goal.az = Math.round(this.view.az / (Math.PI * 2)) * Math.PI * 2;
     this.goal.polar = 0.92;
     this.goal.target.set(0, 0, 0);
-    this.goal.dist = 17.5;
+    this.goal.dist = 17.5 * GROW;
   }
 
   // --- the loop ---

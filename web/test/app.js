@@ -7,7 +7,7 @@ let ws, me = 0, board = null, colors = [], room = null, game = null, seq = 0;
 let deadlineAt = 0, endsAt = 0, selected = -1, log = [], publicRooms = null;
 let bid = 0, trade = { to: 0, give: [], get: [], giveCash: 0, getCash: 0 }, draft = null;
 
-const groupColors = ['', '#8d5524', '#2ec4f1', '#ff6fb5', '#ff8a1f', '#e63946', '#3a6ff7'];
+const groupColors = ['', '#8d5524', '#2ec4f1', '#ff6fb5', '#9b5de5', '#ff8a1f', '#f2c014', '#e63946', '#3a6ff7'];
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const status = s => { document.getElementById('status').textContent = s || ''; };
 
@@ -174,7 +174,8 @@ function roomView() {
 
 function cell(i) {
   const s = board.squares[i];
-  const [row, col] = i < 8 ? [9, 9 - i] : i < 16 ? [9 - (i - 8), 1] : i < 24 ? [1, i - 15] : [i - 23, 9];
+  const k = board.squares.length / 4; // squares per side, its corner first
+  const [row, col] = i < k ? [k + 1, k + 1 - i] : i < 2 * k ? [k + 1 - (i - k), 1] : i < 3 * k ? [1, i - 2 * k + 1] : [i - 3 * k + 1, k + 1];
   const d = deed(i);
   const pawns = game.players.filter(p => !p.bankrupt && p.pos === i)
     .map(p => `<span class="pawn" style="background:${colorOf(p.id)}" title="${esc(nm(p.id))}"></span>`).join('');
