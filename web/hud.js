@@ -21,6 +21,7 @@ export function describe(app, e) {
     case 'turn': return '<span class="sep">Tour de ' + w + '</span>';
     case 'rolled': return w + ' fait ' + e.dice.join(' + ') + (e.dice[0] === e.dice[1] ? ' <b>double !</b>' : '');
     case 'salary': return w + ' touche ' + e.amount + ' au Départ';
+    case 'bonus': return w + ' tombe pile sur le Départ : ' + (e.by === 'roll' ? 'un lancer de plus 🎲' : 'construction sur la rue de son choix 🏗');
     case 'moved': return w + ' arrive sur ' + s;
     case 'jailed': return w + ' est emmené au poste 🚓';
     case 'freed': return w + ' sort du poste' + (e.amount ? ' (' + e.amount + ')' : '');
@@ -261,12 +262,12 @@ function builtCost(b, s, from, to) {
 }
 
 // levelButtons are the buttons to take street sq from level from to each level it may reach.
-function levelButtons(b, me, sq, a, from, base = 0) {
+function levelButtons(b, me, sq, a, from, base = 0, size = 'big') {
   const s = b.squares[sq];
   let html = '';
   for (let l = from === 0 && a === 'buy' ? 0 : from + 1; l <= reach(b, me, from); l++) {
     const cost = base + builtCost(b, s, from, l);
-    html += `<button class="btn big ${(a === 'buy' ? l === 0 : l === from + 1) ? 'main' : ''}" data-do="act" data-a="${a}" data-sq="${sq}" data-level="${l}" ${me.cash < cost ? 'disabled' : ''}>${LEVELS[l]} ${money(cost)}</button>`;
+    html += `<button class="btn ${size} ${(a === 'buy' ? l === 0 : l === from + 1) ? 'main' : ''}" data-do="act" data-a="${a}" data-sq="${sq}" data-level="${l}" ${me.cash < cost ? 'disabled' : ''}>${LEVELS[l]} ${money(cost)}</button>`;
   }
   return html;
 }
@@ -286,7 +287,8 @@ function actions(app) {
   const mine = g.turn === app.me;
   // standing on a street of mine I may build on, this landing only
   const build = () => mine && g.here >= 0 && g.here === me.pos ? levelButtons(b, me, g.here, 'build', g.deeds.find(d => d.square === g.here).level) : '';
-  const buildInfo = () => build() ? `Construire sur <b>${esc(b.squares[g.here].name)}</b> ?` : '';
+  const buildInfo = () => build() ? `Construire sur <b>${esc(b.squares[g.here].name)}</b> ?` :
+    mine && g.buildAnywhere ? '🏗 <b>Départ pile</b> : clique une de tes rues pour y construire.' : '';
   switch (g.phase) {
     case 'roll':
       if (mine) {
@@ -332,6 +334,10 @@ function deed(app) {
   const me = g.players.find(p => p.id === app.me);
   if (d && d.owner === app.me && me && !me.bankrupt && g.phase !== 'over') {
     const a = (x, l) => `<button class="btn small" data-do="act" data-a="${x}" data-sq="${app.selected}">${l}</button>`;
+    // landed right on the start and drew building: any street of mine, from its card
+    if (s.kind === 'street' && !d.mortgaged && g.buildAnywhere && g.turn === app.me && (g.phase === 'roll' || g.phase === 'end')) {
+      acts += levelButtons(b, me, app.selected, 'build', d.level, 0, 'small');
+    }
     if (s.kind === 'street' && d.level > 0) acts += a('sell', 'Revendre un niveau');
     acts += d.mortgaged ? a('unmortgage', 'Lever l\'hypothèque') : a('mortgage', 'Hypothéquer');
   }
@@ -411,7 +417,7 @@ export function rulesModal(app) {
       <li><b>Au poste</b>, pour sortir : fais un double, paie ${b.jailFine} ou joue une carte. Après ${b.jailTurns} essais, l'amende est due.</li>
       <li><b>Maisons</b> : en achetant une rue, prends-la nue ou avec 1 ou 2 maisons (3 après ton premier passage au Départ). Ensuite, chaque fois que tu retombes sur ta rue, ajoute des maisons, sans avoir besoin de tout le groupe. La tour se construit sur une rue à 3 maisons, en y retombant.</li>
       <li><b>Loyers</b> : quand tu as tout un groupe de couleur, ses rues sans maison rapportent le double, ses rues bâties une fois et demie.</li>
-      <li><b>Le Départ</b> rapporte ${s ? s.salary : 'un salaire'} à chaque passage.</li>
+      <li><b>Le Départ</b> rapporte ${s ? s.salary : 'un salaire'} à chaque passage. En tombant pile dessus, pile ou face : un lancer de plus, ou construire sur la rue de ton choix (comme si tu y retombais).</li>
       <li><b>Une dette</b> : vends, hypothèque ou échange pour payer, sinon c'est la faillite.</li>
       <li><b>Échanges</b> : propriétés et argent, à tout moment, avec n'importe qui.</li>
       <li><b>Minuteur</b> : si tu tardes, le jeu joue à ta place.</li>

@@ -47,7 +47,7 @@ func (g *Game) build(p, sq, level int) error {
 	if g.Phase != PhaseRoll && g.Phase != PhaseEnd {
 		return ErrPhase
 	}
-	if err := g.ownedBy(p, sq); err != nil || sq != g.here {
+	if err := g.ownedBy(p, sq); err != nil || sq != g.here && !(g.anywhere && g.Board.Squares[sq].Kind == KindStreet) {
 		return ErrInvalid
 	}
 	d := &g.Deeds[sq]
@@ -59,7 +59,7 @@ func (g *Game) build(p, sq, level int) error {
 		return ErrCash
 	}
 	g.transfer(p, -1, cost)
-	d.Level, g.here = level, -1
+	d.Level, g.here, g.anywhere = level, -1, false
 	g.emit(Event{Kind: "built", Who: g.id(p), Square: sq, Level: level, Amount: cost})
 	return nil
 }

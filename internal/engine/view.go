@@ -17,6 +17,7 @@ package engine
 //	paid         who, to, amount: a debt paid
 //	bought       who, square, amount (the square alone: "built" follows for the houses bought with it)
 //	declined     who, square: not bought, it stays free
+//	bonus        who, square, by: landed right on the start, won BonusRoll or BonusBuild
 //	built, sold  who, square, level (now), amount (paid, or got back)
 //	mortgaged, unmortgaged   who, square, amount (got, or paid)
 //	offer, traded, rejected, cancelled   who, to, trade: a trade proposed by who, accepted by who,
@@ -40,14 +41,15 @@ func (g *Game) emit(e Event) { g.events = append(g.events, e) }
 
 type View struct {
 	Phase     Phase        `json:"phase"`
-	Turn      uint32       `json:"turn"`      // the current player
-	Round     int          `json:"round"`     // from 1
-	MaxRounds int          `json:"maxRounds"` // 0: none
-	Dice      [2]int       `json:"dice"`      // the last roll
-	Doubles   int          `json:"doubles"`   // doubles in a row this turn: the player rolls again after one, the third sends them to jail
-	Here      int          `json:"here"`      // the street the current player may build on now, having landed on it; -1: none
-	Players   []PlayerView `json:"players"`   // in the order they play
-	Deeds     []DeedView   `json:"deeds"`     // the squares someone owns
+	Turn      uint32       `json:"turn"`          // the current player
+	Round     int          `json:"round"`         // from 1
+	MaxRounds int          `json:"maxRounds"`     // 0: none
+	Dice      [2]int       `json:"dice"`          // the last roll
+	Doubles   int          `json:"doubles"`       // doubles in a row this turn: the player rolls again after one, the third sends them to jail
+	Here      int          `json:"here"`          // the street the current player may build on now, having landed on it; -1: none
+	Anywhere  bool         `json:"buildAnywhere"` // the current player landed right on the start, drew BonusBuild: may build on any street of theirs, once
+	Players   []PlayerView `json:"players"`       // in the order they play
+	Deeds     []DeedView   `json:"deeds"`         // the squares someone owns
 	Debt      *DebtView    `json:"debt,omitempty"`
 	Trades    []TradeView  `json:"trades"`
 	Ranking   []uint32     `json:"ranking"` // the standings now, final once over
@@ -87,7 +89,7 @@ type TradeView struct {
 }
 
 func (g *Game) View() View {
-	v := View{Phase: g.Phase, Turn: g.id(g.Turn), Round: g.Round, MaxRounds: g.Rules.MaxRounds, Dice: g.Dice, Doubles: g.Doubles, Here: -1,
+	v := View{Phase: g.Phase, Turn: g.id(g.Turn), Round: g.Round, MaxRounds: g.Rules.MaxRounds, Dice: g.Dice, Doubles: g.Doubles, Here: -1, Anywhere: g.anywhere,
 		Deeds: []DeedView{}, Trades: []TradeView{}, Winner: g.id(g.Winner), WinBy: g.WinBy}
 	if h := g.here; h >= 0 && g.Deeds[h].Owner == g.Turn && !g.Deeds[h].Mortgaged {
 		v.Here = h // not once traded or mortgaged since landing

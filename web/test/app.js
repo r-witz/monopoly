@@ -86,6 +86,7 @@ function describe(e) {
     case 'paid': return w + ' paie ' + e.amount + ' à ' + t;
     case 'bought': return w + ' achète ' + s + ' pour ' + e.amount;
     case 'declined': return w + ' n\'achète pas ' + s;
+    case 'bonus': return w + ' tombe pile sur le Départ : ' + (e.by === 'roll' ? 'un lancer de plus' : 'construction sur la rue de son choix');
     case 'built': return w + ' construit sur ' + s + ' (niveau ' + e.level + ')';
     case 'sold': return w + ' revend un niveau sur ' + s + ' (+' + e.amount + ')';
     case 'mortgaged': return w + ' hypothèque ' + s + ' (+' + e.amount + ')';
@@ -210,17 +211,24 @@ function actions() {
   if (p.bankrupt) return '<p class="muted">Tu as fait faillite.</p>';
   if (game.phase === 'over') return '';
   const myTurn = game.turn === me, b = (a, l, main) => `<button ${main ? 'class="main"' : ''} data-do="act" data-a="${a}">${l}</button>`;
-  // on a street of mine I just landed on: build up to a level (the tower only from 3 houses)
-  const upgrades = () => {
-    if (game.here < 0 || game.here !== p.pos) return '';
-    const s = board.squares[game.here], lvl = game.deeds.find(d => d.square === game.here).level;
+  // on a street of mine I just landed on, or any street of mine after landing right on the start
+  // and drawing building: build up to a level (the tower only from 3 houses)
+  const upgradesOf = sq => {
+    const s = board.squares[sq], lvl = game.deeds.find(d => d.square === sq).level;
     const top = lvl >= board.maxLevel - 1 ? board.maxLevel : p.lapped ? board.maxLevel - 1 : Math.min(2, board.maxLevel - 1);
     let html = '', cost = 0;
     for (let l = lvl + 1; l <= top; l++) {
       cost += l === board.maxLevel ? s.towerCost : s.buildCost;
-      html += `<button data-do="act" data-a="build" data-sq="${game.here}" data-level="${l}">${l === board.maxLevel ? 'Tour' : l + ' maison' + (l > 1 ? 's' : '')} (${cost})</button>`;
+      html += `<button data-do="act" data-a="build" data-sq="${sq}" data-level="${l}">${l === board.maxLevel ? 'Tour' : l + ' maison' + (l > 1 ? 's' : '')} (${cost})</button>`;
     }
     return html ? 'Construire sur ' + esc(s.name) + ' : ' + html + '<br>' : '';
+  };
+  const upgrades = () => {
+    if (!myTurn) return '';
+    if (game.here >= 0 && game.here === p.pos) return upgradesOf(game.here);
+    if (!game.buildAnywhere) return '';
+    return 'Départ pile, au choix :<br>' + game.deeds.filter(d => d.owner === me && !d.mortgaged && board.squares[d.square].kind === 'street')
+      .map(d => upgradesOf(d.square)).join('');
   };
   switch (game.phase) {
     case 'roll':

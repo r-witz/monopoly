@@ -163,6 +163,13 @@ async function play({ m, at }) {
         card = app.board.cards[e.card];
         if (!scene.fast) await hud.card(app, card.text, e.who);
         break;
+      case 'bonus':
+        if (!scene.fast) {
+          const who = e.who === app.me ? '' : '<b>' + hud.esc(nm(e.who)) + '</b>';
+          hud.banner(e.by === 'roll' ? '🎲 Départ pile : ' + (who ? who + ' rejoue' : 'tu rejoues !') :
+            '🏗 Départ pile : ' + (who ? who + ' construit sur la rue de son choix' : 'construis sur la rue de ton choix !'), 1.6);
+        }
+        break;
       case 'bankrupt':
         if (!scene.fast) hud.banner('💥 <b>' + hud.esc(nm(e.who)) + '</b> fait faillite', 1.6);
         break;
