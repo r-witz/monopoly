@@ -100,7 +100,7 @@ function describe(e) {
     case 'rejected': return w + ' refuse l\'échange de ' + t;
     case 'cancelled': return w + ' retire son offre à ' + t;
     case 'bankrupt': return w + ' fait faillite' + (e.to ? ' au profit de ' + t : '');
-    case 'over': return 'Partie terminée : ' + w + ' gagne !';
+    case 'over': return 'Partie terminée : ' + w + ' gagne' + (e.by ? ' (' + { transit: 'toutes les lignes', groups: '3 quartiers complets', side: 'un côté complet' }[e.by] + ')' : '') + ' !';
   }
   return e.kind;
 }
@@ -150,7 +150,9 @@ function settingsForm(owner) {
         `<option value="${v}" ${s.end === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     ${num('rounds', 'tours')}${num('minutes', 'minutes')}<br>
     ${num('startCash', 'argent de départ')}${num('salary', 'salaire')}<br>
-    ${num('turnSeconds', 's par décision')}${num('auctionSeconds', 's par enchère')}
+    ${num('turnSeconds', 's par décision')}${num('auctionSeconds', 's par enchère')}<br>
+    victoire immédiate :${[['winTransit', '4 lignes'], ['winGroups', '3 quartiers'], ['winSide', 'un côté']].map(([k, l]) =>
+      ` <label><input type="checkbox" id="set-${k}" data-set="${k}" ${s[k] ? 'checked' : ''} ${dis}> ${l}</label>`).join('')}
     ${owner ? '<br><button data-do="settings">Appliquer</button>' : ''}
   </div>`;
 }

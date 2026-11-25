@@ -43,7 +43,7 @@ export function describe(app, e) {
     case 'rejected': return w + ' refuse l\'échange de ' + t;
     case 'cancelled': return w + ' retire son offre';
     case 'bankrupt': return w + ' fait faillite 💥';
-    case 'over': return '🏆 ' + w + ' gagne la partie !';
+    case 'over': return '🏆 ' + w + ' gagne la partie' + (e.by ? ' : ' + WIN_BY[e.by] : '') + ' !';
   }
   return e.kind;
 }
@@ -163,6 +163,12 @@ function seg(k, options, value) {
 }
 
 const END = [['rounds', 'Tours'], ['time', 'Temps'], ['survivor', 'Survivant']];
+
+// the instant wins: what owning ends the game at once, by the setting that turns it on
+const WINS = [['winTransit', '4 lignes de transport', 'les posséder toutes'], ['winGroups', '3 quartiers complets', 'trois groupes de couleur entiers'],
+  ['winSide', 'Un côté complet', "tous les quartiers d'un même côté du plateau"]];
+// WIN_BY says how an instant win was won, by the reason the server gives (winBy)
+export const WIN_BY = { transit: 'toutes les lignes de transport', groups: '3 quartiers complets', side: "tous les quartiers d'un côté" };
 const END_HINT = { rounds: 'le plus riche après N tours de table', time: 'le plus riche quand le temps est écoulé', survivor: 'le dernier à ne pas avoir fait faillite' };
 
 function settingsForm(app, owner) {
@@ -175,6 +181,8 @@ function settingsForm(app, owner) {
     row('Salaire au Départ', stepper('salary', s, owner)),
     row('Temps pour décider', stepper('turnSeconds', s, owner, ' s'), 'puis le jeu joue à ta place'),
     row('Temps par enchère', stepper('auctionSeconds', s, owner, ' s'), 'sans nouvelle offre'),
+    ...WINS.map(([k, label, hint]) => row('🏆 ' + label, owner ? seg(k, [[true, 'Oui'], [false, 'Non']], s[k]) : `<span class="v">${s[k] ? 'Oui' : 'Non'}</span>`,
+      'victoire immédiate : ' + hint)),
   ].join('');
 }
 
@@ -362,6 +370,7 @@ export function overModal(app) {
   const rest = g.ranking.slice(3).map((id, i) => `<li><span class="rk">${i + 4}</span>${ball(colorOf(id))}<span class="nm">${esc(nm(id))}</span>${worth(id)}</li>`).join('');
   return `<div class="card modalbox podium">
     <h2 class="title">🏆 ${esc(nm(g.winner))} gagne !</h2>
+    ${g.winBy ? `<p class="muted">avec ${WIN_BY[g.winBy]}</p>` : ''}
     <div class="steps">${step(1)}${step(0)}${step(2)}</div>
     ${rest ? '<ol class="rest">' + rest + '</ol>' : ''}
     <div class="bar"><button class="btn" data-do="closeModal">Voir le plateau</button><button class="btn red big" data-do="lobby">Retour au salon</button></div>
@@ -374,6 +383,7 @@ export function rulesModal(app) {
   const end = !s ? 'au bout d\'un nombre de tours ou d\'un temps choisi, le plus riche gagne ; ou au dernier survivant' :
     s.end === 'rounds' ? 'après ' + s.rounds + ' tours de table, le plus riche gagne (argent, propriétés et constructions)' :
     s.end === 'time' ? 'au bout de ' + s.minutes + ' minutes, le plus riche gagne (argent, propriétés et constructions)' : 'le dernier joueur à ne pas avoir fait faillite gagne';
+  const wins = !s ? [] : WINS.filter(([k]) => s[k]).map(([, label]) => label.toLowerCase());
   return `<div class="card modalbox rules">
     <h2>Comment on joue</h2>
     <ul>
@@ -386,6 +396,7 @@ export function rulesModal(app) {
       <li><b>Échanges</b> : propriétés et argent, à tout moment, avec n'importe qui.</li>
       <li><b>Minuteur</b> : si tu tardes, le jeu joue à ta place.</li>
       <li><b>Fin</b> : ${end}.</li>
+      ${wins.length ? `<li><b>Victoire immédiate</b> : ${wins.join(', ou ')}.</li>` : ''}
     </ul>
     <div class="bar"><span></span><button class="btn sun" data-do="closeModal">Compris !</button></div>
   </div>`;

@@ -217,6 +217,9 @@ func (g *Game) payDebt(p int) error {
 	g.transfer(p, d.To, d.Amount)
 	g.Debt = nil
 	g.emit(Event{Kind: "paid", Who: g.id(p), To: g.id(d.To), Amount: d.Amount})
+	if g.checkWin(p) { // what p got by a trade while owing
+		return nil
+	}
 	d.then()
 	return nil
 }

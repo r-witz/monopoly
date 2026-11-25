@@ -19,6 +19,9 @@ func (g *Game) buy(p int) error {
 	g.transfer(p, -1, price)
 	g.Deeds[sq].Owner = p
 	g.emit(Event{Kind: "bought", Who: g.id(p), Square: sq, Amount: price})
+	if g.checkWin(p) {
+		return nil
+	}
 	g.settle()
 	return nil
 }
@@ -95,6 +98,9 @@ func (g *Game) closeAuction() {
 		g.Deeds[a.Square].Owner = a.Bidder
 	}
 	g.emit(Event{Kind: "auctioned", Who: g.id(a.Bidder), Square: a.Square, Amount: a.High})
+	if g.checkWin(a.Bidder) {
+		return
+	}
 	g.settle()
 }
 
@@ -199,6 +205,7 @@ func (g *Game) accept(p, id int) error {
 	}
 	g.Trades = slices.DeleteFunc(g.Trades, func(o *Trade) bool { return o == t })
 	g.emit(Event{Kind: "traded", Who: g.id(p), To: g.id(t.From), Trade: id})
+	g.checkWin(t.To, t.From)
 	return nil
 }
 

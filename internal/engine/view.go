@@ -24,7 +24,7 @@ package engine
 //	offer, traded, rejected, cancelled   who, to, trade: a trade proposed by who, accepted by who,
 //	             rejected by who, withdrawn by who
 //	bankrupt     who, to (the creditor who gets everything, 0: the bank)
-//	over         who: the winner
+//	over         who: the winner, by: the instant win it won by (WinByTransit…), none for the richest
 type Event struct {
 	Kind   string `json:"kind"`
 	Who    uint32 `json:"who,omitempty"`
@@ -35,6 +35,7 @@ type Event struct {
 	Card   int    `json:"card"`
 	Level  int    `json:"level,omitempty"`
 	Trade  int    `json:"trade,omitempty"`
+	By     string `json:"by,omitempty"`
 }
 
 func (g *Game) emit(e Event) { g.events = append(g.events, e) }
@@ -53,6 +54,7 @@ type View struct {
 	Trades    []TradeView  `json:"trades"`
 	Ranking   []uint32     `json:"ranking"` // the standings now, final once over
 	Winner    uint32       `json:"winner,omitempty"`
+	WinBy     string       `json:"winBy,omitempty"` // the instant win the winner won by, "" for the richest
 }
 
 type PlayerView struct {
@@ -95,7 +97,7 @@ type TradeView struct {
 
 func (g *Game) View() View {
 	v := View{Phase: g.Phase, Turn: g.id(g.Turn), Round: g.Round, MaxRounds: g.Rules.MaxRounds, Dice: g.Dice, Doubles: g.Doubles,
-		Deeds: []DeedView{}, Trades: []TradeView{}, Winner: g.id(g.Winner)}
+		Deeds: []DeedView{}, Trades: []TradeView{}, Winner: g.id(g.Winner), WinBy: g.WinBy}
 	for i, p := range g.Players {
 		v.Players = append(v.Players, PlayerView{p.ID, p.Cash, p.Pos, p.InJail, p.JailTurns, p.JailCards, p.Bankrupt, g.Worth(i)})
 	}

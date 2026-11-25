@@ -24,7 +24,18 @@ type Rules struct {
 	StartCash int // each player's cash at the start, their only asset
 	Salary    int // when passing or landing on the start
 	MaxRounds int // the game ends after this many rounds, the richest winning; 0: no limit
+	// Instant wins: owning these ends the game at once, whatever the mortgages.
+	WinTransit bool // every transit line
+	WinGroups  bool // 3 whole groups
+	WinSide    bool // every street of a side of the board
 }
+
+// Why an instant win was won (Game.WinBy).
+const (
+	WinByTransit = "transit"
+	WinByGroups  = "groups"
+	WinBySide    = "side"
+)
 
 // Action is a player's move. Which fields count depends on Kind.
 type Action struct {
@@ -92,7 +103,8 @@ type Game struct {
 	Auction *Auction
 	Debt    *Debt
 	Trades  []*Trade
-	Winner  int // seat, -1 before the end (and when the game was stopped with nobody in)
+	Winner  int    // seat, -1 before the end (and when the game was stopped with nobody in)
+	WinBy   string // an instant win (WinByTransit…), "" when the richest won
 	// Step changes whenever the decision the game waits for changes (and on every bid): a timer
 	// started for one step is void once Step moved on.
 	Step int
@@ -268,18 +280,92 @@ func (g *Game) Resign(p int) []Event {
 func (g *Game) Finish() []Event {
 	g.events = nil
 	if g.Phase != PhaseOver {
-		g.finish()
+		g.finish(-1, "")
 	}
 	return g.flush()
 }
 
-func (g *Game) finish() {
+// finish ends the game: winner wins by an instant win (by), or with -1 the richest wins.
+func (g *Game) finish(winner int, by string) {
 	g.Auction, g.Debt, g.Trades = nil, nil, nil
 	g.setPhase(PhaseOver)
-	if r := g.Ranking(); len(r) > 0 {
-		g.Winner = r[0]
+	g.Winner, g.WinBy = winner, by
+	if winner < 0 {
+		if r := g.Ranking(); len(r) > 0 {
+			g.Winner = r[0]
+		}
 	}
-	g.emit(Event{Kind: "over", Who: g.id(g.Winner)})
+	g.emit(Event{Kind: "over", Who: g.id(g.Winner), By: by})
+}
+
+// checkWin ends the game when one of the players ps, in that order, owns what an instant win of
+// the rules asks for, and says whether it did. A player who owes money cannot win before paying
+// it (payDebt checks again then): winning would wipe the debt out.
+func (g *Game) checkWin(ps ...int) bool {
+	for _, p := range ps {
+		if p < 0 || g.Players[p].Bankrupt || g.Debt != nil && p == g.Turn {
+			continue
+		}
+		if by := g.instantWin(p); by != "" {
+			g.finish(p, by)
+			return true
+		}
+	}
+	return false
+}
+
+// instantWin is the instant win p owns, "" for none.
+func (g *Game) instantWin(p int) string {
+	r, b := g.Rules, g.Board
+	if r.WinTransit {
+		lines := 0
+		for _, s := range b.Squares {
+			if s.Kind == KindTransit {
+				lines++
+			}
+		}
+		if lines > 0 && g.owned(p, KindTransit) == lines {
+			return WinByTransit
+		}
+	}
+	if !r.WinGroups && !r.WinSide {
+		return ""
+	}
+	whole := map[int]bool{} // by group: owned whole by p
+	side := len(b.Squares) / 4
+	sides := make([][]int, 4) // the groups of each side
+	for sq, s := range b.Squares {
+		if s.Kind != KindStreet {
+			continue
+		}
+		if _, ok := whole[s.Group]; !ok {
+			whole[s.Group] = g.ownsGroup(p, s.Group)
+			sides[min(sq/side, 3)] = append(sides[min(sq/side, 3)], s.Group)
+		}
+	}
+	if r.WinGroups {
+		n := 0
+		for _, w := range whole {
+			if w {
+				n++
+			}
+		}
+		if n >= 3 {
+			return WinByGroups
+		}
+	}
+	if r.WinSide {
+		for _, groups := range sides {
+			all := len(groups) > 0
+			for _, gr := range groups {
+				all = all && whole[gr]
+			}
+			if all {
+				return WinBySide
+			}
+		}
+	}
+	return ""
 }
 
 // Worth is what a player has: cash, properties at their price (half when mortgaged), buildings
@@ -313,6 +399,10 @@ func (g *Game) Ranking() []int {
 		}
 	}
 	slices.SortStableFunc(seats, func(a, b int) int { return key[b] - key[a] })
+	if g.WinBy != "" { // an instant win: the winner first, whatever the worth
+		i := slices.Index(seats, g.Winner)
+		seats = append(append([]int{g.Winner}, seats[:i]...), seats[i+1:]...)
+	}
 	return seats
 }
 
@@ -343,7 +433,7 @@ func (g *Game) transfer(from, to, amount int) {
 func (g *Game) nextTurn() {
 	g.Doubles, g.again, g.Debt = 0, false, nil
 	if g.alive() <= 1 {
-		g.finish()
+		g.finish(-1, "")
 		return
 	}
 	i := g.Turn
@@ -358,7 +448,7 @@ func (g *Game) nextTurn() {
 	}
 	if g.Rules.MaxRounds > 0 && g.Round > g.Rules.MaxRounds {
 		g.Round = g.Rules.MaxRounds
-		g.finish()
+		g.finish(-1, "")
 		return
 	}
 	g.Turn = i

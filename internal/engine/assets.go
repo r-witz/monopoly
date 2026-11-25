@@ -207,8 +207,11 @@ func (g *Game) bankrupt(p, to int) {
 			d.To = -1
 		}
 	}
+	if g.checkWin(to) { // the creditor may now own what wins
+		return
+	}
 	if g.alive() <= 1 {
-		g.finish()
+		g.finish(-1, "")
 		return
 	}
 	if a := g.Auction; a != nil {
