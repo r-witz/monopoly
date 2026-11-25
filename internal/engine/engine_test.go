@@ -225,9 +225,18 @@ func TestRentDoublesOnWholeGroupAndBuildings(t *testing.T) {
 		t.Fatalf("whole group rent %d, want %d", r, 2*s.Rent[0])
 	}
 	g.Deeds[1].Level = 2
-	if r := g.rent(1); r != s.Rent[2] {
-		t.Fatalf("rent at level 2: %d, want %d", r, s.Rent[2])
+	if r, want := g.rent(1), (3*s.Rent[2]+1)/2; r != want {
+		t.Fatalf("whole group rent at level 2: %d, want %d", r, want)
 	}
+	g.Deeds[1].Level = 1 // 25: 37.5, rounded up
+	if r := g.rent(1); r != 38 || s.Rent[1] != 25 {
+		t.Fatalf("whole group rent at level 1: %d (rent %d), want 38", r, s.Rent[1])
+	}
+	g.Deeds[3].Owner = 0 // the group no longer whole
+	if r := g.rent(1); r != s.Rent[1] {
+		t.Fatalf("rent at level 1: %d, want %d", r, s.Rent[1])
+	}
+	g.Deeds[3].Owner, g.Deeds[1].Level = 1, 2
 	if _, err := g.Apply(1, Action{Kind: "mortgage", Square: 1}); err != ErrInvalid {
 		t.Fatalf("mortgage with buildings on the street: %v", err)
 	}

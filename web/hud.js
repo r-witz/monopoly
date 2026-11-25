@@ -334,9 +334,9 @@ function deed(app) {
   const head = s.kind === 'street' ? GROUP_COLORS[s.group] : '#2b2d42';
   let rows = '';
   if (s.kind === 'street') {
-    rows = [['Loyer', s.rent[0]], ['Groupe complet', s.rent[0] * 2], ['🏠', s.rent[1]], ['🏠🏠', s.rent[2]], ['🏠🏠🏠', s.rent[3]], ['🏢 Tour', s.rent[4]]]
+    rows = [['Loyer', s.rent[0]], ['Quartier complet', s.rent[0] * 2], ['🏠', s.rent[1]], ['🏠🏠', s.rent[2]], ['🏠🏠🏠', s.rent[3]], ['🏢 Tour', s.rent[4]]]
       .map(([l, v], i) => `<tr class="${d && (i === 0 ? d.level === 0 : i >= 2 && d.level === i - 1) ? 'cur' : ''}"><td>${l}</td><td>${fmt(v)}</td></tr>`).join('') +
-      `<tr class="sub"><td>Maison</td><td>${fmt(s.buildCost)}</td></tr><tr class="sub"><td>Tour</td><td>${fmt(s.towerCost)}</td></tr>`;
+      `<tr class="sub"><td>Bâti, quartier complet</td><td>× 1,5</td></tr><tr class="sub"><td>Maison</td><td>${fmt(s.buildCost)}</td></tr><tr class="sub"><td>Tour</td><td>${fmt(s.towerCost)}</td></tr>`;
   } else if (s.kind === 'transit') {
     rows = b.transitRent.map((v, i) => `<tr><td>${i + 1} ligne${i ? 's' : ''}</td><td>${v}</td></tr>`).join('');
   } else if (s.kind === 'utility') {
@@ -425,7 +425,7 @@ export function rulesModal(app) {
       <li><b>Un double</b> (les deux dés pareils) : après ton déplacement, tu relances. Au <b>3ᵉ double d'affilée</b>, direction le poste de police, sans bouger.</li>
       <li><b>Au poste</b>, pour sortir : fais un double, paie ${b.jailFine} ou joue une carte. Après ${b.jailTurns} essais, l'amende est due.</li>
       <li><b>Maisons</b> : en achetant une rue, prends-la nue ou avec 1 ou 2 maisons (3 après ton premier passage au Départ). Ensuite, chaque fois que tu retombes sur ta rue, ajoute des maisons, sans avoir besoin de tout le groupe. La tour se construit sur une rue à 3 maisons, en y retombant.</li>
-      <li><b>Loyers</b> : doublés sur une rue sans maison quand tu as tout son groupe de couleur.</li>
+      <li><b>Loyers</b> : quand tu as tout un groupe de couleur, ses rues sans maison rapportent le double, ses rues bâties une fois et demie.</li>
       <li><b>Le Départ</b> rapporte ${s ? s.salary : 'un salaire'} à chaque passage.</li>
       <li><b>Une dette</b> : vends, hypothèque ou échange pour payer, sinon c'est la faillite.</li>
       <li><b>Échanges</b> : propriétés et argent, à tout moment, avec n'importe qui.</li>
