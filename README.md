@@ -103,6 +103,9 @@ arrête et exclut, anti-flood, écriture non bloquante. Le protocole est décrit
   le Départ). Ensuite, on ajoute des maisons chaque fois qu'on retombe sur sa rue, une fois par
   passage, sans avoir besoin du groupe complet. La tour se construit sur une rue à 3 maisons, en y
   retombant. Une rue bâtie ne s'hypothèque pas et ne s'échange pas.
+- **Départ pile** : en tombant pile sur le Départ (aux dés ou par une carte), pile ou face : un
+  lancer de plus (après un éventuel double), ou construire sur la rue de son choix, comme si on y
+  retombait.
 - **Loyers** : quand on a tout un groupe, ses rues sans maison rapportent le double, ses rues
   bâties (maisons ou tour) une fois et demie, arrondi au-dessus. Les rues reprennent Business
   Tour, en milliers (on démarre avec 2 000, ses 2 millions) : prix, maisons, et une tour plus

@@ -103,6 +103,9 @@ func randomAction(g *Game, r *rand.Rand) (int, Action) {
 	a := Action{Kind: kinds[r.IntN(len(kinds))], Square: r.IntN(len(g.Deeds)+2) - 1, Level: r.IntN(g.Board.MaxLevel+3) - 1}
 	if a.Kind == "build" && r.IntN(2) == 0 {
 		a.Square = g.here // most random squares are not where the player stands
+		if g.anywhere {
+			a.Square = r.IntN(len(g.Deeds))
+		}
 	}
 	if len(g.Trades) > 0 {
 		a.Trade = g.Trades[r.IntN(len(g.Trades))].ID
@@ -573,6 +576,72 @@ func TestNoWinInDebt(t *testing.T) {
 	won(t, g, must(t, g, 0, Action{Kind: "pay"}), 0, WinByTransit)
 	if g.Players[1].Cash != 1500+200 {
 		t.Fatalf("creditor cash %d, the debt was not paid", g.Players[1].Cash)
+	}
+	invariants(t, g)
+}
+
+// Landing right on the start, heads: a roll more, after the double that brought the player there.
+func TestStartBonusRoll(t *testing.T) {
+	g := newGame(2, testRules, 1)
+	g.coin = func() bool { return true }
+	g.Players[0].Pos = 36
+	script(g, [2]int{2, 2}, [2]int{1, 2}, [2]int{1, 2})
+	ev := must(t, g, 0, Action{Kind: "roll"}) // 36 + 4: the start, by a double
+	if !slices.ContainsFunc(ev, func(e Event) bool { return e.Kind == "bonus" && e.By == BonusRoll }) || g.Phase != PhaseRoll {
+		t.Fatalf("phase %s, events %v", g.Phase, ev)
+	}
+	must(t, g, 0, Action{Kind: "roll"}) // the double's roll: square 3
+	must(t, g, 0, Action{Kind: "decline"})
+	if g.Phase != PhaseRoll || g.Doubles != 0 || g.Turn != 0 {
+		t.Fatalf("no bonus roll: phase %s, doubles %d", g.Phase, g.Doubles)
+	}
+	must(t, g, 0, Action{Kind: "roll"}) // the bonus roll: square 6
+	must(t, g, 0, Action{Kind: "decline"})
+	if g.Phase != PhaseEnd {
+		t.Fatalf("phase %s after the bonus roll", g.Phase)
+	}
+
+	// passing the start is no landing on it
+	g = newGame(2, testRules, 1)
+	g.coin = func() bool { t.Fatal("tossed when passing"); return true }
+	g.Players[0].Pos = 36
+	script(g, [2]int{2, 3})
+	must(t, g, 0, Action{Kind: "roll"})
+	invariants(t, g)
+}
+
+// Landing right on the start, tails: building on a street of one's choice, once.
+func TestStartBonusBuild(t *testing.T) {
+	g := newGame(2, testRules, 1)
+	g.coin = func() bool { return false }
+	g.Deeds[21].Owner, g.Deeds[21].Level = 0, 1
+	g.Deeds[5].Owner = 0
+	g.Deeds[23].Owner = 1
+	g.Players[0].Pos = 36
+	script(g, [2]int{1, 3})
+	must(t, g, 0, Action{Kind: "roll"})
+	if !g.View().Anywhere || g.Phase != PhaseEnd || !g.Players[0].Lapped {
+		t.Fatalf("anywhere %v phase %s", g.View().Anywhere, g.Phase)
+	}
+	for _, sq := range []int{5, 23} { // a transit line, someone else's street
+		if _, err := g.Apply(0, Action{Kind: "build", Square: sq, Level: 1}); err != ErrInvalid {
+			t.Fatalf("built on %d: %v", sq, err)
+		}
+	}
+	if _, err := g.Apply(0, Action{Kind: "build", Square: 21, Level: 4}); err != ErrInvalid {
+		t.Fatalf("the tower from 1 house: %v", err)
+	}
+	cash := g.Players[0].Cash
+	must(t, g, 0, Action{Kind: "build", Square: 21, Level: 3})
+	if s := &g.Board.Squares[21]; g.Deeds[21].Level != 3 || g.Players[0].Cash != cash-2*s.BuildCost {
+		t.Fatalf("level %d cash %d", g.Deeds[21].Level, g.Players[0].Cash)
+	}
+	if _, err := g.Apply(0, Action{Kind: "build", Square: 21, Level: 4}); err != ErrInvalid || g.View().Anywhere {
+		t.Fatalf("built twice: %v", err)
+	}
+	must(t, g, 0, Action{Kind: "end"})
+	if g.View().Anywhere {
+		t.Fatal("anywhere for the next player")
 	}
 	invariants(t, g)
 }

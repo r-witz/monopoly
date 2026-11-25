@@ -91,7 +91,7 @@ func (g *Game) returnJailCards(n int) {
 func (g *Game) jail(p int) {
 	pl := g.Players[p]
 	pl.Pos, pl.InJail, pl.JailTurns = g.Board.Jail, true, 0
-	g.again, g.here = false, -1
+	g.again, g.here, g.anywhere, g.extra = false, -1, false, 0
 	g.emit(Event{Kind: "jailed", Who: pl.ID, Square: pl.Pos})
 }
 
@@ -106,7 +106,7 @@ func (g *Game) free(p, fine int) {
 // on the start going forward (p has then made a lap), and plays the square reached.
 func (g *Game) advance(p, steps int) {
 	pl, n := g.Players[p], len(g.Board.Squares)
-	g.here = -1
+	g.here, g.anywhere = -1, false
 	if steps > 0 && pl.Pos+steps >= n {
 		pl.Lapped = true
 		g.transfer(-1, p, g.Rules.Salary)
@@ -152,18 +152,37 @@ func (g *Game) land(p int) {
 	case KindGoToJail:
 		g.jail(p)
 		g.settle()
+	case KindStart:
+		g.startBonus(p)
 	default:
 		g.settle()
 	}
 }
 
-// settle is the end of the current player's move: they roll again after a double, else they
-// may end their turn.
+// startBonus is the luck of landing right on the start, by the dice or a card: heads p rolls
+// once more, tails p may build on a street of theirs, as if landing on it.
+func (g *Game) startBonus(p int) {
+	by := BonusRoll
+	if g.coin() {
+		g.extra++
+	} else {
+		by, g.anywhere = BonusBuild, true
+	}
+	g.emit(Event{Kind: "bonus", Who: g.id(p), Square: g.Players[p].Pos, By: by})
+	g.settle()
+}
+
+// settle is the end of the current player's move: they roll again after a double, then for
+// each roll won on the start, else they may end their turn.
 func (g *Game) settle() {
 	switch pl := g.Players[g.Turn]; {
 	case pl.Bankrupt:
 		g.nextTurn()
 	case g.again && !pl.InJail:
+		g.setPhase(PhaseRoll)
+	case g.extra > 0 && !pl.InJail:
+		g.extra--
+		g.Doubles = 0 // a new run: its doubles count from none
 		g.setPhase(PhaseRoll)
 	default:
 		g.setPhase(PhaseEnd)

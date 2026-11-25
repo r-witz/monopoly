@@ -36,6 +36,12 @@ const (
 	WinBySide    = "side"
 )
 
+// What landing right on the start gives (the "bonus" event's By), one or the other by chance.
+const (
+	BonusRoll  = "roll"  // a roll more, after any double
+	BonusBuild = "build" // building, as if landing there, on a street of the player's choice
+)
+
 // Action is a player's move. Which fields count depends on Kind.
 type Action struct {
 	Kind   string `json:"a"`      // see Apply
@@ -103,12 +109,15 @@ type Game struct {
 
 	again     bool // the current player rolls again (a double, not out of jail)
 	here      int  // the street the current player landed on, theirs, and may build on now; -1: none
+	anywhere  bool // the current player landed right on the start and may build on a street of theirs now
+	extra     int  // rolls the current player won on the start, played once the doubles are over
 	deck      []int
 	nextTrade int
 	out       int // players bankrupt so far
 	bank      int // money the bank put into the game, net: sum of cash = players*StartCash + bank
 	rng       *rand.Rand
 	dice      func() [2]int
+	coin      func() bool // heads or tails: what landing right on the start gives
 	events    []Event
 }
 
@@ -117,6 +126,7 @@ type Game struct {
 func New(b *Board, r Rules, ids []uint32, seed uint64) *Game {
 	g := &Game{Board: b, Rules: r, Winner: -1, Round: 1, here: -1, rng: rand.New(rand.NewPCG(seed, seed^0x9e3779b97f4a7c15))}
 	g.dice = func() [2]int { return [2]int{g.rng.IntN(6) + 1, g.rng.IntN(6) + 1} }
+	g.coin = func() bool { return g.rng.IntN(2) == 0 }
 	for _, id := range ids {
 		g.Players = append(g.Players, &Player{ID: id, Cash: r.StartCash})
 	}
@@ -163,8 +173,9 @@ func (g *Game) seat(id uint32) int {
 //	buy (level), decline     PhaseBuy: the square the current player is on, a street with level houses (0 to 2, 3 once
 //	                         the player has passed the start, never the tower); declined, it stays free
 //	build (square, level)    the current player, PhaseRoll or PhaseEnd, on the street of theirs they just
-//	                         landed on (not mortgaged; the group need not be whole): up to level, once per
-//	                         landing. Houses up to 2, 3 once the player has passed the start; the tower only
+//	                         landed on, or on any street of theirs after landing right on the start and
+//	                         drawing BonusBuild (not mortgaged; the group need not be whole): up to level,
+//	                         once per landing. Houses up to 2, 3 once the player has passed the start; the tower only
 //	                         on a street that already had 3 houses
 //	sell (square)            one level of a street, at any time
 //	mortgage, unmortgage     at any time, not while the player owes (unmortgage); a
@@ -420,7 +431,7 @@ func (g *Game) transfer(from, to, amount int) {
 
 // nextTurn hands the turn to the next player still in, or ends the game.
 func (g *Game) nextTurn() {
-	g.Doubles, g.again, g.Debt, g.here = 0, false, nil, -1
+	g.Doubles, g.again, g.Debt, g.here, g.anywhere, g.extra = 0, false, nil, -1, false, 0
 	if g.alive() <= 1 {
 		g.finish(-1, "")
 		return
