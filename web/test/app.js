@@ -201,8 +201,8 @@ function squareDetail() {
   if (s.kind === 'tax') info = 'À payer : ' + s.tax + '.';
   let actions = '';
   if (d && d.owner === me && mine() && !mine().bankrupt) {
-    actions = ['build:Construire', 'sell:Revendre un niveau', d.mortgaged ? 'unmortgage:Lever l\'hypothèque' : 'mortgage:Hypothéquer']
-      .filter(x => s.kind === 'street' || !x.startsWith('build') && !x.startsWith('sell'))
+    actions = ['sell:Revendre un niveau', d.mortgaged ? 'unmortgage:Lever l\'hypothèque' : 'mortgage:Hypothéquer']
+      .filter(x => s.kind === 'street' || !x.startsWith('sell'))
       .map(x => { const [a, l] = x.split(':'); return `<button data-do="act" data-a="${a}" data-sq="${selected}">${l}</button>`; }).join('');
   }
   return `<h3>${esc(s.name)}</h3><div>${s.price ? 'Prix ' + s.price + '. ' : ''}${info}</div>
@@ -215,14 +215,29 @@ function actions() {
   if (p.bankrupt) return '<p class="muted">Tu as fait faillite.</p>';
   if (game.phase === 'over') return '';
   const myTurn = game.turn === me, b = (a, l, main) => `<button ${main ? 'class="main"' : ''} data-do="act" data-a="${a}">${l}</button>`;
+  // on a street of mine I just landed on: build up to a level (the tower only from 3 houses)
+  const upgrades = () => {
+    if (game.here < 0 || game.here !== p.pos) return '';
+    const s = board.squares[game.here], lvl = game.deeds.find(d => d.square === game.here).level;
+    const top = lvl >= board.maxLevel - 1 ? board.maxLevel : p.lapped ? board.maxLevel - 1 : Math.min(2, board.maxLevel - 1);
+    let html = '', cost = 0;
+    for (let l = lvl + 1; l <= top; l++) {
+      cost += l === board.maxLevel ? s.towerCost : s.buildCost;
+      html += `<button data-do="act" data-a="build" data-sq="${game.here}" data-level="${l}">${l === board.maxLevel ? 'Tour' : l + ' maison' + (l > 1 ? 's' : '')} (${cost})</button>`;
+    }
+    return html ? 'Construire sur ' + esc(s.name) + ' : ' + html + '<br>' : '';
+  };
   switch (game.phase) {
     case 'roll':
       if (!myTurn) break;
-      return b('roll', 'Lancer les dés', true) + (p.inJail ? b('payjail', 'Payer ' + board.jailFine) + (p.jailCards ? b('jailcard', 'Utiliser la carte') : '') : '');
+      return upgrades() + b('roll', 'Lancer les dés', true) + (p.inJail ? b('payjail', 'Payer ' + board.jailFine) + (p.jailCards ? b('jailcard', 'Utiliser la carte') : '') : '');
     case 'buy': {
       if (!myTurn) break;
       const s = board.squares[p.pos];
-      return b('buy', 'Acheter ' + esc(s.name) + ' (' + s.price + ')', true) + b('decline', 'Refuser (enchère)');
+      const top = s.kind !== 'street' ? 0 : p.lapped ? board.maxLevel - 1 : Math.min(2, board.maxLevel - 1);
+      let buys = '';
+      for (let l = 0; l <= top; l++) buys += `<button ${l ? '' : 'class="main"'} data-do="act" data-a="buy" data-level="${l}">Acheter ${esc(s.name)}${l ? ' + ' + l + ' maison' + (l > 1 ? 's' : '') : ''} (${s.price + l * s.buildCost})</button>`;
+      return buys + b('decline', 'Refuser (enchère)');
     }
     case 'auction': {
       const a = game.auction;
@@ -238,7 +253,7 @@ function actions() {
         b('pay', 'Payer', true) + b('bankrupt', 'Déclarer faillite');
     case 'end':
       if (!myTurn) break;
-      return b('end', 'Finir le tour', true);
+      return upgrades() + b('end', 'Finir le tour', true);
   }
   return '<p class="muted">À ' + esc(nm(game.turn)) + ' de jouer.</p>';
 }
@@ -323,7 +338,7 @@ const handlers = {
   kick: d => send({ t: 'kick', id: +d.id }),
   back() { game = null; render(); },
   select(d) { selected = +d.sq; render(); },
-  act: d => act(d.a, { square: d.sq ? +d.sq : 0, trade: d.trade ? +d.trade : 0 }),
+  act: d => act(d.a, { square: d.sq ? +d.sq : 0, level: d.level ? +d.level : 0, trade: d.trade ? +d.trade : 0 }),
   bid: () => act('bid', { amount: bid }),
   offer() {
     const { to, give, get, giveCash, getCash } = trade;

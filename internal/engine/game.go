@@ -12,7 +12,7 @@ type Phase string
 
 const (
 	PhaseRoll    Phase = "roll"    // the current player rolls (in jail: or pays, or uses a card)
-	PhaseBuy     Phase = "buy"     // the current player buys the square they are on, or declines: an auction
+	PhaseBuy     Phase = "buy"     // the current player buys the square they are on (a street with houses), or declines: an auction
 	PhaseAuction Phase = "auction" // every player still in may bid until all but the highest bidder passed
 	PhaseDebt    Phase = "debt"    // the current player raises the cash they owe, then pays, or goes bankrupt
 	PhaseEnd     Phase = "end"     // the current player may still manage, then ends the turn
@@ -41,6 +41,7 @@ const (
 type Action struct {
 	Kind   string `json:"a"`      // see Apply
 	Square int    `json:"square"` // build, sell, mortgage, unmortgage
+	Level  int    `json:"level"`  // buy: the houses bought with the street; build: the level to build up to
 	Amount int    `json:"amount"` // bid
 	Offer  *Offer `json:"offer"`  // offer
 	Trade  int    `json:"trade"`  // accept, reject, cancel: the trade's ID
@@ -64,6 +65,7 @@ type Player struct {
 	InJail    bool
 	JailTurns int // failed rolls in jail
 	JailCards int
+	Lapped    bool // has passed the start once: may then have 3 houses
 	Bankrupt  bool
 	Out       int // the order in which the player went bankrupt, from 1; 0: still in
 }
@@ -110,6 +112,7 @@ type Game struct {
 	Step int
 
 	again     bool // the current player rolls again (a double, not out of jail)
+	here      int  // the street the current player landed on, theirs, and may build on now; -1: none
 	deck      []int
 	nextTrade int
 	out       int // players bankrupt so far
@@ -122,7 +125,7 @@ type Game struct {
 // New starts a game for these players, in this order, the first one to play. seed fixes every
 // roll and every shuffle.
 func New(b *Board, r Rules, ids []uint32, seed uint64) *Game {
-	g := &Game{Board: b, Rules: r, Winner: -1, Round: 1, rng: rand.New(rand.NewPCG(seed, seed^0x9e3779b97f4a7c15))}
+	g := &Game{Board: b, Rules: r, Winner: -1, Round: 1, here: -1, rng: rand.New(rand.NewPCG(seed, seed^0x9e3779b97f4a7c15))}
 	g.dice = func() [2]int { return [2]int{g.rng.IntN(6) + 1, g.rng.IntN(6) + 1} }
 	for _, id := range ids {
 		g.Players = append(g.Players, &Player{ID: id, Cash: r.StartCash})
@@ -167,12 +170,17 @@ func (g *Game) seat(id uint32) int {
 //
 //	roll                     the current player, PhaseRoll
 //	payjail, jailcard        leave the police station before rolling: pay the fine, or use a card
-//	buy, decline             PhaseBuy: the square the current player is on; decline starts an auction
+//	buy (level), decline     PhaseBuy: the square the current player is on, a street with level houses (0 to 2, 3 once
+//	                         the player has passed the start, never the tower); decline starts an auction, of the bare square
 //	bid (amount), pass       PhaseAuction: any player still in it; a bid beats the highest, is at least half the price, within
 //	                         the bidder's cash; who passed is out of this auction
-//	build, sell (square)     one level, at any time, evenly across the group (the whole group owned,
-//	                         none of it mortgaged); not while an auction runs or the builder owes
-//	mortgage, unmortgage     the same times; a street only with no building in its group
+//	build (square, level)    the current player, PhaseRoll or PhaseEnd, on the street of theirs they just
+//	                         landed on (not mortgaged; the group need not be whole): up to level, once per
+//	                         landing. Houses up to 2, 3 once the player has passed the start; the tower only
+//	                         on a street that already had 3 houses
+//	sell (square)            one level of a street, at any time
+//	mortgage, unmortgage     at any time, not while an auction runs or the player owes (unmortgage); a
+//	                         street only with no building on it
 //	pay, bankrupt            PhaseDebt: pay what is owed, or give up: everything goes to the creditor
 //	end                      PhaseEnd: the next player's turn
 //	offer (offer)            propose a trade, replacing the proposer's open one; at any time. A
@@ -196,7 +204,7 @@ func (g *Game) Apply(p int, a Action) ([]Event, error) {
 	case "jailcard":
 		err = g.useJailCard(p)
 	case "buy":
-		err = g.buy(p)
+		err = g.buy(p, a.Level)
 	case "decline":
 		err = g.decline(p)
 	case "bid":
@@ -204,7 +212,7 @@ func (g *Game) Apply(p int, a Action) ([]Event, error) {
 	case "pass":
 		err = g.pass(p)
 	case "build":
-		err = g.build(p, a.Square)
+		err = g.build(p, a.Square, a.Level)
 	case "sell":
 		err = g.sell(p, a.Square)
 	case "mortgage":
@@ -431,7 +439,7 @@ func (g *Game) transfer(from, to, amount int) {
 
 // nextTurn hands the turn to the next player still in, or ends the game.
 func (g *Game) nextTurn() {
-	g.Doubles, g.again, g.Debt = 0, false, nil
+	g.Doubles, g.again, g.Debt, g.here = 0, false, nil, -1
 	if g.alive() <= 1 {
 		g.finish(-1, "")
 		return

@@ -76,11 +76,11 @@ func invariants(t *testing.T, g *Game) {
 		case d.Level > 0 && s.Kind != KindStreet:
 			t.Fatalf("building on square %d", sq)
 		}
-		if d.Level > 0 {
-			lo, hi, mortgaged := g.levels(s.Group)
-			if !g.ownsGroup(d.Owner, s.Group) || mortgaged || hi-lo > 1 {
-				t.Fatalf("group %d built unevenly, or not whole, or mortgaged", s.Group)
-			}
+		if d.Level > 0 && d.Mortgaged {
+			t.Fatalf("square %d built and mortgaged", sq)
+		}
+		if d.Level > firstLapHouses && !g.Players[d.Owner].Lapped {
+			t.Fatalf("square %d at level %d, its owner never passed the start", sq, d.Level)
 		}
 	}
 	cards := len(g.deck)
@@ -100,7 +100,11 @@ func randomAction(g *Game, r *rand.Rand) (int, Action) {
 	if r.IntN(2) == 0 {
 		p = g.Turn
 	}
-	a := Action{Kind: kinds[r.IntN(len(kinds))], Square: r.IntN(len(g.Deeds)+2) - 1, Amount: r.IntN(g.Players[p].Cash+100) - 10}
+	a := Action{Kind: kinds[r.IntN(len(kinds))], Square: r.IntN(len(g.Deeds)+2) - 1, Level: r.IntN(g.Board.MaxLevel+3) - 1,
+		Amount: r.IntN(g.Players[p].Cash+100) - 10}
+	if a.Kind == "build" && r.IntN(2) == 0 {
+		a.Square = g.here // most random squares are not where the player stands
+	}
 	if len(g.Trades) > 0 {
 		a.Trade = g.Trades[r.IntN(len(g.Trades))].ID
 	}
@@ -220,17 +224,142 @@ func TestRentDoublesOnWholeGroupAndBuildings(t *testing.T) {
 	if r := g.rent(1); r != 2*s.Rent[0] {
 		t.Fatalf("whole group rent %d, want %d", r, 2*s.Rent[0])
 	}
-	must(t, g, 1, Action{Kind: "build", Square: 1})
-	if _, err := g.Apply(1, Action{Kind: "build", Square: 1}); err != ErrInvalid {
-		t.Fatalf("uneven build: %v", err)
-	}
-	must(t, g, 1, Action{Kind: "build", Square: 3})
-	must(t, g, 1, Action{Kind: "build", Square: 1})
+	g.Deeds[1].Level = 2
 	if r := g.rent(1); r != s.Rent[2] {
 		t.Fatalf("rent at level 2: %d, want %d", r, s.Rent[2])
 	}
-	if _, err := g.Apply(1, Action{Kind: "mortgage", Square: 3}); err != ErrInvalid {
-		t.Fatalf("mortgage with buildings in the group: %v", err)
+	if _, err := g.Apply(1, Action{Kind: "mortgage", Square: 1}); err != ErrInvalid {
+		t.Fatalf("mortgage with buildings on the street: %v", err)
+	}
+	must(t, g, 1, Action{Kind: "mortgage", Square: 3}) // nothing on it: its group does not matter
+}
+
+// standOn puts seat p on square sq on their turn, as if they had just rolled there.
+func standOn(t *testing.T, g *Game, p, sq int) {
+	t.Helper()
+	g.Turn, g.Phase = p, PhaseRoll
+	g.Players[p].Pos = sq - 4
+	script(g, [2]int{1, 3})
+	must(t, g, p, Action{Kind: "roll"})
+}
+
+// On a free street: the bare street, or with 1 or 2 houses; 3 houses once the player has passed
+// the start; never the tower.
+func TestBuyWithHouses(t *testing.T) {
+	g := newGame(2, testRules, 1)
+	s := &g.Board.Squares[11]
+	standOn(t, g, 0, 11)
+	if g.Phase != PhaseBuy {
+		t.Fatalf("phase %s", g.Phase)
+	}
+	for _, level := range []int{-1, 3, 4} {
+		if _, err := g.Apply(0, Action{Kind: "buy", Level: level}); err != ErrInvalid {
+			t.Fatalf("buy with %d houses before a lap: %v", level, err)
+		}
+	}
+	ev := must(t, g, 0, Action{Kind: "buy", Level: 2})
+	if g.Deeds[11].Level != 2 || g.Players[0].Cash != 1500-s.Price-2*s.BuildCost || !has(ev, "built") {
+		t.Fatalf("level %d cash %d, events %v", g.Deeds[11].Level, g.Players[0].Cash, ev)
+	}
+	if g.here != -1 {
+		t.Fatal("may build again on the landing it bought on")
+	}
+
+	g = newGame(2, testRules, 1)
+	g.Players[0].Pos = 39
+	script(g, [2]int{6, 6})
+	must(t, g, 0, Action{Kind: "roll"}) // passes the start, lands on 11
+	if !g.Players[0].Lapped || g.Phase != PhaseBuy || g.Players[0].Pos != 11 {
+		t.Fatalf("lapped %v phase %s pos %d", g.Players[0].Lapped, g.Phase, g.Players[0].Pos)
+	}
+	if _, err := g.Apply(0, Action{Kind: "buy", Level: 4}); err != ErrInvalid {
+		t.Fatalf("buy with the tower: %v", err)
+	}
+	must(t, g, 0, Action{Kind: "buy", Level: 3})
+
+	// transit and utilities: no houses
+	g = newGame(2, testRules, 1)
+	standOn(t, g, 0, 5)
+	if _, err := g.Apply(0, Action{Kind: "buy", Level: 1}); err != ErrInvalid {
+		t.Fatalf("a house on a transit line: %v", err)
+	}
+	invariants(t, g)
+}
+
+// Building: standing on one's street, once per landing, whole group or not; the tower on a
+// street at 3 houses, a later landing.
+func TestBuildOnLanding(t *testing.T) {
+	g := newGame(2, testRules, 1)
+	s := &g.Board.Squares[21]
+	g.Deeds[21].Owner, g.Deeds[21].Level = 0, 1 // group 5, not whole
+	if _, err := g.Apply(0, Action{Kind: "build", Square: 21, Level: 2}); err != ErrInvalid {
+		t.Fatalf("built away from the street: %v", err)
+	}
+	standOn(t, g, 0, 21)
+	if g.View().Here != 21 {
+		t.Fatalf("here %d", g.View().Here)
+	}
+	for _, level := range []int{1, 3, 4} {
+		if _, err := g.Apply(0, Action{Kind: "build", Square: 21, Level: level}); err != ErrInvalid {
+			t.Fatalf("up to %d from 1 house, before a lap: %v", level, err)
+		}
+	}
+	cash := g.Players[0].Cash
+	must(t, g, 0, Action{Kind: "build", Square: 21, Level: 2})
+	if g.Deeds[21].Level != 2 || g.Players[0].Cash != cash-s.BuildCost {
+		t.Fatalf("level %d cash %d", g.Deeds[21].Level, g.Players[0].Cash)
+	}
+	if _, err := g.Apply(0, Action{Kind: "build", Square: 21, Level: 2}); err != ErrInvalid {
+		t.Fatalf("built twice on one landing: %v", err)
+	}
+	must(t, g, 0, Action{Kind: "end"})
+
+	// 2 houses before a lap: nothing to build
+	standOn(t, g, 0, 21)
+	if g.here != -1 {
+		t.Fatal("here with 2 houses before a lap")
+	}
+	must(t, g, 0, Action{Kind: "end"})
+
+	g.Players[0].Lapped = true
+	standOn(t, g, 0, 21)
+	if _, err := g.Apply(0, Action{Kind: "build", Square: 21, Level: 4}); err != ErrInvalid {
+		t.Fatalf("the tower from 2 houses: %v", err)
+	}
+	must(t, g, 0, Action{Kind: "build", Square: 21, Level: 3})
+	must(t, g, 0, Action{Kind: "end"})
+
+	standOn(t, g, 0, 21)
+	cash = g.Players[0].Cash
+	must(t, g, 0, Action{Kind: "build", Square: 21, Level: 4})
+	if g.Deeds[21].Level != 4 || g.Players[0].Cash != cash-s.TowerCost {
+		t.Fatalf("level %d cash %d", g.Deeds[21].Level, g.Players[0].Cash)
+	}
+	must(t, g, 0, Action{Kind: "end"})
+
+	// at the tower, nothing left to build
+	standOn(t, g, 0, 21)
+	if g.here != -1 {
+		t.Fatal("here at the tower")
+	}
+	// a mortgaged street of one's own: nothing either
+	g.Deeds[23].Owner, g.Deeds[23].Mortgaged = 0, true
+	must(t, g, 0, Action{Kind: "end"})
+	standOn(t, g, 0, 23)
+	if g.here != -1 {
+		t.Fatal("here on a mortgaged street")
+	}
+	invariants(t, g)
+}
+
+// Passing the start makes a lap, even with no salary.
+func TestLappedWithoutSalary(t *testing.T) {
+	g := newGame(2, Rules{StartCash: 1500}, 1)
+	g.Players[0].Pos = 38
+	script(g, [2]int{1, 2})
+	must(t, g, 0, Action{Kind: "roll"})
+	if !g.Players[0].Lapped || g.Players[1].Lapped || !g.View().Players[0].Lapped {
+		t.Fatal("no lap")
 	}
 }
 
@@ -267,7 +396,7 @@ func TestTradeCheckedAgainOnAccept(t *testing.T) {
 	g := newGame(2, testRules, 1)
 	g.Deeds[1].Owner, g.Deeds[3].Owner, g.Deeds[5].Owner = 0, 0, 1
 	must(t, g, 0, Action{Kind: "offer", Offer: &Offer{To: 2, Give: []int{1}, Get: []int{5}, GiveCash: 50}})
-	must(t, g, 0, Action{Kind: "build", Square: 1}) // now square 1 cannot change hands
+	g.Deeds[1].Level = 1 // now square 1 cannot change hands
 	if _, err := g.Apply(1, Action{Kind: "accept", Trade: 1}); err != ErrInvalid {
 		t.Fatalf("accept after a build: %v", err)
 	}

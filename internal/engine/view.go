@@ -15,7 +15,7 @@ package engine
 //	card         who, card: its index in the board's cards
 //	debt         who, to, amount: owed, the game waits for who to raise it
 //	paid         who, to, amount: a debt paid
-//	bought       who, square, amount
+//	bought       who, square, amount (the square alone: "built" follows for the houses bought with it)
 //	auction      who (who declined), square: the auction starts
 //	bid, pass    who, square, amount (bid)
 //	auctioned    who (0: nobody bid, the bank keeps it), square, amount
@@ -47,6 +47,7 @@ type View struct {
 	MaxRounds int          `json:"maxRounds"` // 0: none
 	Dice      [2]int       `json:"dice"`      // the last roll
 	Doubles   int          `json:"doubles"`   // doubles in a row this turn: the player rolls again after one, the third sends them to jail
+	Here      int          `json:"here"`      // the street the current player may build on now, having landed on it; -1: none
 	Players   []PlayerView `json:"players"`   // in the order they play
 	Deeds     []DeedView   `json:"deeds"`     // the squares someone owns
 	Auction   *AuctionView `json:"auction,omitempty"`
@@ -64,6 +65,7 @@ type PlayerView struct {
 	InJail    bool   `json:"inJail"`
 	JailTurns int    `json:"jailTurns"`
 	JailCards int    `json:"jailCards"`
+	Lapped    bool   `json:"lapped"` // has passed the start once: may have 3 houses
 	Bankrupt  bool   `json:"bankrupt"`
 	Worth     int    `json:"worth"`
 }
@@ -96,10 +98,13 @@ type TradeView struct {
 }
 
 func (g *Game) View() View {
-	v := View{Phase: g.Phase, Turn: g.id(g.Turn), Round: g.Round, MaxRounds: g.Rules.MaxRounds, Dice: g.Dice, Doubles: g.Doubles,
+	v := View{Phase: g.Phase, Turn: g.id(g.Turn), Round: g.Round, MaxRounds: g.Rules.MaxRounds, Dice: g.Dice, Doubles: g.Doubles, Here: -1,
 		Deeds: []DeedView{}, Trades: []TradeView{}, Winner: g.id(g.Winner), WinBy: g.WinBy}
+	if h := g.here; h >= 0 && g.Deeds[h].Owner == g.Turn && !g.Deeds[h].Mortgaged {
+		v.Here = h // not once traded or mortgaged since landing
+	}
 	for i, p := range g.Players {
-		v.Players = append(v.Players, PlayerView{p.ID, p.Cash, p.Pos, p.InJail, p.JailTurns, p.JailCards, p.Bankrupt, g.Worth(i)})
+		v.Players = append(v.Players, PlayerView{p.ID, p.Cash, p.Pos, p.InJail, p.JailTurns, p.JailCards, p.Lapped, p.Bankrupt, g.Worth(i)})
 	}
 	for sq, d := range g.Deeds {
 		if d.Owner >= 0 {

@@ -14,16 +14,21 @@ func (g *Game) ownsGroup(p, group int) bool {
 	return true
 }
 
-// levels returns the lowest and highest level in the group, and whether any of it is mortgaged.
-func (g *Game) levels(group int) (lo, hi int, mortgaged bool) {
-	lo = g.Board.MaxLevel
-	for sq, s := range g.Board.Squares {
-		if s.Group == group {
-			d := g.Deeds[sq]
-			lo, hi, mortgaged = min(lo, d.Level), max(hi, d.Level), mortgaged || d.Mortgaged
-		}
+// firstLapHouses is how many houses a street may have before its owner has passed the start.
+const firstLapHouses = 2
+
+// reach is the highest level p may build a street at level up to, on landing there (or buying
+// it, from 0): houses, up to firstLapHouses before p has passed the start; the tower only on a
+// street already at 3 houses.
+func (g *Game) reach(p, level int) int {
+	switch top := g.Board.MaxLevel; {
+	case level >= top-1:
+		return top
+	case g.Players[p].Lapped:
+		return top - 1
+	default:
+		return min(firstLapHouses, top-1)
 	}
-	return lo, hi, mortgaged
 }
 
 // spending says whether p may spend cash outside the decision of the turn: not while an auction
@@ -40,27 +45,28 @@ func (g *Game) ownedBy(p, sq int) error {
 	return nil
 }
 
-func (g *Game) build(p, sq int) error {
-	if err := g.ownedBy(p, sq); err != nil {
-		return err
+// build builds street sq of p up to level, p standing on it: see Apply.
+func (g *Game) build(p, sq, level int) error {
+	if p != g.Turn {
+		return ErrNotYours
 	}
-	if !g.spending(p) {
+	if g.Phase != PhaseRoll && g.Phase != PhaseEnd {
 		return ErrPhase
 	}
-	s, d := &g.Board.Squares[sq], &g.Deeds[sq]
-	if s.Kind != KindStreet || !g.ownsGroup(p, s.Group) {
+	if err := g.ownedBy(p, sq); err != nil || sq != g.here {
 		return ErrInvalid
 	}
-	if lo, _, mortgaged := g.levels(s.Group); mortgaged || d.Level > lo || d.Level == g.Board.MaxLevel {
+	d := &g.Deeds[sq]
+	if d.Mortgaged || level <= d.Level || level > g.reach(p, d.Level) {
 		return ErrInvalid
 	}
-	cost := g.Board.levelCost(sq, d.Level+1)
+	cost := g.Board.builtCost(sq, level) - g.Board.builtCost(sq, d.Level)
 	if g.Players[p].Cash < cost {
 		return ErrCash
 	}
 	g.transfer(p, -1, cost)
-	d.Level++
-	g.emit(Event{Kind: "built", Who: g.id(p), Square: sq, Level: d.Level, Amount: cost})
+	d.Level, g.here = level, -1
+	g.emit(Event{Kind: "built", Who: g.id(p), Square: sq, Level: level, Amount: cost})
 	return nil
 }
 
@@ -68,8 +74,7 @@ func (g *Game) sell(p, sq int) error {
 	if err := g.ownedBy(p, sq); err != nil {
 		return err
 	}
-	s, d := &g.Board.Squares[sq], &g.Deeds[sq]
-	if _, hi, _ := g.levels(s.Group); d.Level == 0 || d.Level < hi {
+	if g.Deeds[sq].Level == 0 {
 		return ErrInvalid
 	}
 	g.sellLevel(p, sq)
@@ -84,18 +89,10 @@ func (g *Game) sellLevel(p, sq int) {
 	g.emit(Event{Kind: "sold", Who: g.id(p), Square: sq, Level: d.Level, Amount: back})
 }
 
-// mortgageable says whether sq, owned, can be mortgaged: not already, and no building in its group.
+// mortgageable says whether sq, owned, can be mortgaged: not already, and no building on it.
 func (g *Game) mortgageable(sq int) bool {
-	s := &g.Board.Squares[sq]
-	if g.Deeds[sq].Mortgaged {
-		return false
-	}
-	if s.Kind == KindStreet {
-		if _, hi, _ := g.levels(s.Group); hi > 0 {
-			return false
-		}
-	}
-	return true
+	d := g.Deeds[sq]
+	return !d.Mortgaged && d.Level == 0
 }
 
 func (g *Game) mortgage(p, sq int) error {
@@ -152,14 +149,12 @@ func (g *Game) liquidate(p, amount int) {
 	}
 }
 
-// nextToLiquidate is the square whose building p sells next (the highest one of a group, evenly),
-// else the square p mortgages next, else -1.
+// nextToLiquidate is the street whose building p sells next, else the square p mortgages next,
+// else -1.
 func (g *Game) nextToLiquidate(p int) int {
 	for sq, d := range g.Deeds {
 		if d.Owner == p && d.Level > 0 {
-			if _, hi, _ := g.levels(g.Board.Squares[sq].Group); d.Level == hi {
-				return sq
-			}
+			return sq
 		}
 	}
 	for sq, d := range g.Deeds {
