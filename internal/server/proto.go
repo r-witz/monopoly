@@ -30,7 +30,7 @@ import (
 //	{"t":"kick","id":7}                        take a player out of the room (the owner): during a game they
 //	                                           resign; they may come back with the link, to watch
 //	{"t":"act","a":"roll",...}                 a move of the game: engine.Action's fields ("a", "square",
-//	                                           "level", "amount", "offer", "trade"), see engine.Game.Apply
+//	                                           "level", "offer", "trade"), see engine.Game.Apply
 //
 // Server -> client, JSON text frames:
 //
@@ -193,7 +193,7 @@ type gameMsg struct {
 	// Events is what happened since the last "game" (empty for one sent to a player coming in).
 	Events []engine.Event `json:"events"`
 	// Deadline is in how many ms the timer plays for whoever must decide (see engine.Game.Timeout),
-	// 0 for none. A bid starts it again.
+	// 0 for none.
 	Deadline int64 `json:"deadline"`
 	// EndsIn is in how many ms a game with a time limit ends, 0 for none.
 	EndsIn int64 `json:"endsIn"`

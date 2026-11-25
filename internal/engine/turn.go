@@ -170,15 +170,22 @@ func (g *Game) settle() {
 	}
 }
 
-// rent is what landing on square sq costs, owned by someone else and not mortgaged.
+// rent is what landing on square sq costs, owned by someone else and not mortgaged. A street
+// of a group owned whole: twice its bare rent, or 1.5 times its rent with buildings (rounded,
+// half up).
 func (g *Game) rent(sq int) int {
 	s, d := &g.Board.Squares[sq], g.Deeds[sq]
 	switch s.Kind {
 	case KindStreet:
-		if d.Level == 0 && g.ownsGroup(d.Owner, s.Group) {
-			return 2 * s.Rent[0]
+		rent := s.Rent[d.Level]
+		switch {
+		case !g.ownsGroup(d.Owner, s.Group):
+			return rent
+		case d.Level == 0:
+			return 2 * rent
+		default:
+			return (3*rent + 1) / 2
 		}
-		return s.Rent[d.Level]
 	case KindTransit:
 		return g.Board.TransitRent[g.owned(d.Owner, KindTransit)-1]
 	case KindUtility:

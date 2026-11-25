@@ -74,7 +74,7 @@ internal/engine      les règles, une machine à états pure : ni horloge, ni r�
   game.go            état, phases, Apply / Timeout / Resign / Finish, classement
   turn.go            dés, déplacement, cases, cartes, prison, dettes
   assets.go          constructions, hypothèques, liquidation, faillite
-  market.go          achats, enchères, échanges
+  market.go          achats, échanges
   view.go            ce que reçoivent les clients (état complet + événements)
 internal/server      salles et connexions, repris de P'tits Trous (../golf) : hub, room, conn, shard
   game.go            la partie dans la salle : démarrage, minuteurs, diffusion
@@ -94,28 +94,27 @@ arrête et exclut, anti-flood, écriture non bloquante. Le protocole est décrit
 - **Victoire immédiate** (chacune activable dans les paramètres) : posséder les 4 lignes de
   transport, 3 quartiers complets (ces deux-là actives par défaut), ou tous les quartiers d'un
   même côté du plateau (désactivée par défaut : ses 2 quartiers coûtent peu) termine la partie
-  aussitôt, hypothéqués ou non. Vérifié à chaque achat, enchère, échange accepté ou faillite qui
+  aussitôt, hypothéqués ou non. Vérifié à chaque achat, échange accepté ou faillite qui
   donne des propriétés à un créancier. Un joueur endetté ne gagne qu'après avoir payé sa dette.
 - On lance 2 dés. Un double fait rejouer, trois doubles envoient au poste de police. Pour sortir :
   faire un double, payer 50 ou jouer une carte. Après 3 essais, l'amende est due de toute façon.
-- **Case libre** : on l'achète, ou une enchère s'ouvre pour tous. Elle se ferme quand tout le
-  monde a passé, ou après N secondes sans nouvelle offre.
+- **Case libre** : on l'achète, ou on la laisse : elle reste à vendre, sans enchère.
 - **Maisons** : en achetant une rue, on la prend nue ou avec 1 ou 2 maisons (3 une fois passé
   le Départ). Ensuite, on ajoute des maisons chaque fois qu'on retombe sur sa rue, une fois par
   passage, sans avoir besoin du groupe complet. La tour se construit sur une rue à 3 maisons, en y
-  retombant. Une rue bâtie ne s'hypothèque pas et ne s'échange pas. Une enchère vend la rue nue.
-- **Loyers** : doublés sur une rue sans maison quand on a tout son groupe. Les rues reprennent Business Tour, en milliers (on démarre avec
-  2 000, ses 2 millions) : prix, maisons, et une tour plus chère qu'une maison (150 à 500, comme
-  son hôtel). Les loyers viennent des relevés d'un joueur. Lignes, compagnies, taxes et amende
-  restent celles du jeu classique.
+  retombant. Une rue bâtie ne s'hypothèque pas et ne s'échange pas.
+- **Loyers** : quand on a tout un groupe, ses rues sans maison rapportent le double, ses rues
+  bâties (maisons ou tour) une fois et demie, arrondi au-dessus. Les rues reprennent Business
+  Tour, en milliers (on démarre avec 2 000, ses 2 millions) : prix, maisons, et une tour plus
+  chère qu'une maison (150 à 500, comme son hôtel). Les loyers viennent des relevés d'un joueur.
+  Lignes, compagnies, taxes et amende restent celles du jeu classique.
 - **Dette** : on vend, on hypothèque ou on échange pour payer, sinon c'est la faillite. Tout part
   alors au créancier, ou retourne à la banque.
-- **Échanges** : propriétés et argent dans les deux sens, à tout moment. On ne peut pas en
-  accepter pendant une enchère. Une offre est revérifiée à l'acceptation, et un nouvel envoi
-  remplace l'offre précédente du même joueur.
+- **Échanges** : propriétés et argent dans les deux sens, à tout moment. Une offre est revérifiée
+  à l'acceptation, et un nouvel envoi remplace l'offre précédente du même joueur.
 - **Minuteur** : si le joueur ne décide pas à temps, le serveur joue à sa place. Il lance les dés,
-  refuse l'achat (ce qui ouvre l'enchère), clôt l'enchère, vend et hypothèque pour payer une dette
-  (ou déclare la faillite), puis finit le tour. Une partie ne bloque donc jamais.
+  refuse l'achat, vend et hypothèque pour payer une dette (ou déclare la faillite), puis finit le
+  tour. Une partie ne bloque donc jamais.
 
 Choix faits pour la salle :
 

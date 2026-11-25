@@ -16,9 +16,7 @@ package engine
 //	debt         who, to, amount: owed, the game waits for who to raise it
 //	paid         who, to, amount: a debt paid
 //	bought       who, square, amount (the square alone: "built" follows for the houses bought with it)
-//	auction      who (who declined), square: the auction starts
-//	bid, pass    who, square, amount (bid)
-//	auctioned    who (0: nobody bid, the bank keeps it), square, amount
+//	declined     who, square: not bought, it stays free
 //	built, sold  who, square, level (now), amount (paid, or got back)
 //	mortgaged, unmortgaged   who, square, amount (got, or paid)
 //	offer, traded, rejected, cancelled   who, to, trade: a trade proposed by who, accepted by who,
@@ -50,7 +48,6 @@ type View struct {
 	Here      int          `json:"here"`      // the street the current player may build on now, having landed on it; -1: none
 	Players   []PlayerView `json:"players"`   // in the order they play
 	Deeds     []DeedView   `json:"deeds"`     // the squares someone owns
-	Auction   *AuctionView `json:"auction,omitempty"`
 	Debt      *DebtView    `json:"debt,omitempty"`
 	Trades    []TradeView  `json:"trades"`
 	Ranking   []uint32     `json:"ranking"` // the standings now, final once over
@@ -75,14 +72,6 @@ type DeedView struct {
 	Owner     uint32 `json:"owner"`
 	Level     int    `json:"level"`
 	Mortgaged bool   `json:"mortgaged"`
-}
-
-type AuctionView struct {
-	Square int      `json:"square"`
-	Min    int      `json:"min"` // the lowest bid: half the price
-	High   int      `json:"high"`
-	Bidder uint32   `json:"bidder"` // 0: no bid yet
-	Passed []uint32 `json:"passed"` // out of it
 }
 
 type DebtView struct {
@@ -110,15 +99,6 @@ func (g *Game) View() View {
 		if d.Owner >= 0 {
 			v.Deeds = append(v.Deeds, DeedView{sq, g.id(d.Owner), d.Level, d.Mortgaged})
 		}
-	}
-	if a := g.Auction; a != nil {
-		av := &AuctionView{Square: a.Square, Min: g.minBid(a.Square), High: a.High, Bidder: g.id(a.Bidder), Passed: []uint32{}}
-		for i, passed := range a.Passed {
-			if passed {
-				av.Passed = append(av.Passed, g.id(i))
-			}
-		}
-		v.Auction = av
 	}
 	if d := g.Debt; d != nil {
 		v.Debt = &DebtView{g.id(g.Turn), d.Amount, g.id(d.To)}

@@ -31,12 +31,6 @@ func (g *Game) reach(p, level int) int {
 	}
 }
 
-// spending says whether p may spend cash outside the decision of the turn: not while an auction
-// runs (bids are checked against cash) nor while p owes money.
-func (g *Game) spending(p int) bool {
-	return g.Phase != PhaseAuction && !(g.Phase == PhaseDebt && p == g.Turn)
-}
-
 // ownedBy checks that sq is a square p owns.
 func (g *Game) ownedBy(p, sq int) error {
 	if sq < 0 || sq >= len(g.Deeds) || g.Deeds[sq].Owner != p {
@@ -120,7 +114,7 @@ func (g *Game) unmortgage(p, sq int) error {
 	if !g.Deeds[sq].Mortgaged {
 		return ErrInvalid
 	}
-	if !g.spending(p) {
+	if g.Phase == PhaseDebt && p == g.Turn { // owing: cash goes to the debt first
 		return ErrPhase
 	}
 	cost := g.Board.unmortgage(sq)
@@ -211,15 +205,6 @@ func (g *Game) bankrupt(p, to int) {
 	}
 	if g.alive() <= 1 {
 		g.finish(-1, "")
-		return
-	}
-	if a := g.Auction; a != nil {
-		a.Passed[p] = true
-		if a.Bidder == p { // the bid is void: the auction goes on from nothing
-			a.High, a.Bidder = 0, -1
-		}
-		g.Step++
-		g.checkAuction()
 		return
 	}
 	if p == g.Turn {

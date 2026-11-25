@@ -7,7 +7,7 @@ import * as hud from './hud.js';
 const token = sessionStorage.token || (sessionStorage.token = crypto.randomUUID());
 const app = {
   me: 0, board: null, colors: [], room: null, game: null, seq: 0, deadlineAt: 0, endsAt: 0, selected: -1,
-  log: [], logOpen: false, rooms: null, bid: 0, draft: null, modal: null, dismissed: 0,
+  log: [], logOpen: false, rooms: null, draft: null, modal: null, dismissed: 0,
   trade: { to: 0, give: [], get: [], giveCash: 0, getCash: 0 },
   myName: sessionStorage.name || '', myColor: sessionStorage.color != null ? +sessionStorage.color : -1,
 };
@@ -163,9 +163,6 @@ async function play({ m, at }) {
         card = app.board.cards[e.card];
         if (!scene.fast) await hud.card(app, card.text, e.who);
         break;
-      case 'auction':
-        if (!scene.fast) hud.banner('🔨 Aux enchères !', 1.2);
-        break;
       case 'bankrupt':
         if (!scene.fast) hud.banner('💥 <b>' + hud.esc(nm(e.who)) + '</b> fait faillite', 1.6);
         break;
@@ -175,9 +172,6 @@ async function play({ m, at }) {
   app.game = m.state;
   app.deadlineAt = m.deadline ? at + m.deadline : 0;
   app.endsAt = m.endsIn ? at + m.endsIn : 0;
-  const a = m.state.auction;
-  if (a && app.bid <= a.high) app.bid = a.high + 10;
-  if (a && app.bid < a.min) app.bid = a.min;
   if (m.state.phase === 'over' && m.events.some(e => e.kind === 'over')) app.modal = hud.overModal;
   document.body.classList.remove('waiting');
   hud.render(app);
@@ -227,8 +221,6 @@ const handlers = {
   stop: () => confirm('Arrêter la partie pour tout le monde ?') && send({ t: 'stop' }),
   kick: d => send({ t: 'kick', id: +d.id }),
   act: d => act(d.a, { square: d.sq ? +d.sq : 0, level: d.level ? +d.level : 0, trade: d.trade ? +d.trade : 0 }),
-  bid: () => act('bid', { amount: app.bid }),
-  bidQuick(d) { const a = app.game.auction; app.bid = (a.high || a.min) + +d.n; act('bid', { amount: app.bid }); },
   unselect() { app.selected = -1; scene.select(-1); hud.render(app); },
   pick: d => scene.onPick(+d.sq),
   toggleLog() { app.logOpen = !app.logOpen; hud.renderLog(app); },
@@ -262,7 +254,6 @@ document.addEventListener('input', e => {
   const t = e.target, b = t.dataset;
   if (t.id === 'name') app.myName = t.value; // kept as typed, sent on change
   else if (t.id === 'code') app.code = t.value;
-  else if (b.bind === 'bid') app.bid = +t.value;
   else if (b.bind === 'giveCash' || b.bind === 'getCash') app.trade[b.bind] = Math.max(0, +t.value);
   else if (b.set && app.draft) app.draft[b.set] = t.type === 'checkbox' ? t.checked : t.type === 'number' ? +t.value : t.value;
 });
@@ -286,7 +277,6 @@ document.addEventListener('keydown', e => {
   if (e.target.dataset.set) e.target.blur(); // a setting typed in: sent by its change
   if (e.target.id === 'name') saveName();
   if (e.target.id === 'code') handlers.join();
-  if (e.target.id === 'bid') handlers.bid();
 });
 
 connect();

@@ -2,7 +2,7 @@ package engine
 
 import "slices"
 
-// Auctions and trades.
+// Purchases and trades.
 
 // buy buys the square p is on, a street with level houses: see Apply.
 func (g *Game) buy(p, level int) error {
@@ -34,6 +34,7 @@ func (g *Game) buy(p, level int) error {
 	return nil
 }
 
+// decline leaves the square p is on free: nobody buys it.
 func (g *Game) decline(p int) error {
 	if p != g.Turn {
 		return ErrNotYours
@@ -41,75 +42,9 @@ func (g *Game) decline(p int) error {
 	if g.Phase != PhaseBuy {
 		return ErrPhase
 	}
-	a := &Auction{Square: g.Players[p].Pos, Bidder: -1, Passed: make([]bool, len(g.Players))}
-	for i, o := range g.Players {
-		a.Passed[i] = o.Bankrupt
-	}
-	g.Auction = a
-	g.setPhase(PhaseAuction)
-	g.emit(Event{Kind: "auction", Who: g.id(p), Square: a.Square})
-	return nil
-}
-
-// minBid is the lowest bid an auction on sq takes: half the price of the square.
-func (g *Game) minBid(sq int) int { return (g.Board.Squares[sq].Price + 1) / 2 }
-
-func (g *Game) bid(p, amount int) error {
-	a := g.Auction
-	switch {
-	case g.Phase != PhaseAuction:
-		return ErrPhase
-	case a.Passed[p] || a.Bidder == p || amount <= a.High || amount < g.minBid(a.Square):
-		return ErrInvalid
-	case amount > g.Players[p].Cash:
-		return ErrCash
-	}
-	a.High, a.Bidder = amount, p
-	g.Step++ // the clock starts again
-	g.emit(Event{Kind: "bid", Who: g.id(p), Square: a.Square, Amount: amount})
-	g.checkAuction()
-	return nil
-}
-
-func (g *Game) pass(p int) error {
-	a := g.Auction
-	switch {
-	case g.Phase != PhaseAuction:
-		return ErrPhase
-	case a.Passed[p] || a.Bidder == p:
-		return ErrInvalid
-	}
-	a.Passed[p] = true
-	g.emit(Event{Kind: "pass", Who: g.id(p), Square: a.Square})
-	g.checkAuction()
-	return nil
-}
-
-// checkAuction closes the auction once nobody is left to outbid the highest bidder.
-func (g *Game) checkAuction() {
-	a := g.Auction
-	for i := range g.Players {
-		if !a.Passed[i] && i != a.Bidder {
-			return
-		}
-	}
-	g.closeAuction()
-}
-
-// closeAuction sells the square to the highest bidder, who still has the cash: nobody can spend
-// while an auction runs. With no bid the square stays with the bank.
-func (g *Game) closeAuction() {
-	a := g.Auction
-	g.Auction = nil
-	if a.Bidder >= 0 {
-		g.transfer(a.Bidder, -1, a.High)
-		g.Deeds[a.Square].Owner = a.Bidder
-	}
-	g.emit(Event{Kind: "auctioned", Who: g.id(a.Bidder), Square: a.Square, Amount: a.High})
-	if g.checkWin(a.Bidder) {
-		return
-	}
+	g.emit(Event{Kind: "declined", Who: g.id(p), Square: g.Players[p].Pos})
 	g.settle()
+	return nil
 }
 
 // Offer is a trade as proposed: what the proposer gives and gets, from the player To.
@@ -194,9 +129,6 @@ func (g *Game) accept(p, id int) error {
 	t := g.trade(id)
 	if t == nil || t.To != p {
 		return ErrInvalid
-	}
-	if g.Phase == PhaseAuction {
-		return ErrPhase
 	}
 	if err := g.check(t); err != nil {
 		return err

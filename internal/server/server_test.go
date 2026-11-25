@@ -114,11 +114,6 @@ func (b *bot) move(v *engine.View) map[string]any {
 			return map[string]any{"t": "act", "a": "buy"}
 		}
 		return map[string]any{"t": "act", "a": "decline"}
-	case v.Phase == engine.PhaseAuction && v.Auction.Bidder != b.id && !slices.Contains(v.Auction.Passed, b.id):
-		if v.Auction.High < v.Auction.Min+30 && me.Cash > 200 {
-			return map[string]any{"t": "act", "a": "bid", "amount": max(v.Auction.High+10, v.Auction.Min)}
-		}
-		return map[string]any{"t": "act", "a": "pass"}
 	case v.Phase == engine.PhaseDebt && mine:
 		if me.Cash >= v.Debt.Amount {
 			return map[string]any{"t": "act", "a": "pay"}

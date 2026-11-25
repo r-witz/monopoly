@@ -76,11 +76,7 @@ func (r *Room) publish(events []engine.Event, t float64) {
 	g := r.game
 	if g.Step != r.step {
 		r.step = g.Step
-		secs := r.play.TurnSeconds
-		if g.Phase == engine.PhaseAuction {
-			secs = r.play.AuctionSeconds
-		}
-		r.deadline = t + float64(secs)
+		r.deadline = t + float64(r.play.TurnSeconds)
 	}
 	r.broadcast(r.gameFrame(events, t))
 	if g.Phase == engine.PhaseOver {
