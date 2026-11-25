@@ -20,7 +20,7 @@
   .box h3 { margin: 0 0 6px; font-size: 14px; }
   .lobby { max-width: 640px; }
   .game { display: flex; gap: 14px; align-items: flex-start; }
-  .board { display: grid; grid-template-columns: repeat(9, 74px); grid-template-rows: repeat(9, 74px); gap: 2px; flex: none; }
+  .board { display: grid; grid-template-columns: repeat(11, 62px); grid-template-rows: repeat(11, 62px); gap: 2px; flex: none; }
   .sq { background: #fffdf6; border: 1px solid #bbb; font-size: 10px; padding: 2px; position: relative; cursor: pointer; overflow: hidden; }
   .sq.sel { outline: 3px solid #2b2d42; z-index: 1; }
   .sq .band { height: 8px; margin: -2px -2px 2px; }
@@ -29,7 +29,7 @@
   .sq .lvl { font-size: 11px; }
   .sq .pawns { position: absolute; bottom: 7px; right: 2px; display: flex; gap: 2px; }
   .pawn { width: 12px; height: 12px; border-radius: 50%; border: 1px solid #000; display: inline-block; vertical-align: middle; }
-  .center { grid-row: 2 / 9; grid-column: 2 / 9; background: #e9efe4; border: 1px solid #bbb; padding: 12px; overflow: auto; }
+  .center { grid-row: 2 / -2; grid-column: 2 / -2; background: #e9efe4; border: 1px solid #bbb; padding: 12px; overflow: auto; }
   .dice { font-size: 28px; }
   aside { flex: 1; min-width: 320px; max-width: 520px; }
   table { border-collapse: collapse; width: 100%; }
