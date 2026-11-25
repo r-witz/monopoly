@@ -104,10 +104,11 @@ arrête et exclut, anti-flood, écriture non bloquante. Le protocole est décrit
   le Départ). Ensuite, on ajoute des maisons chaque fois qu'on retombe sur sa rue, une fois par
   passage, sans avoir besoin du groupe complet. La tour se construit sur une rue à 3 maisons, en y
   retombant. Une rue bâtie ne s'hypothèque pas et ne s'échange pas. Une enchère vend la rue nue.
-- **Loyers** : doublés sur une rue sans maison quand on a tout son groupe. Les rues reprennent Business Tour, en milliers (on démarre avec
-  2 000, ses 2 millions) : prix, maisons, et une tour plus chère qu'une maison (150 à 500, comme
-  son hôtel). Les loyers viennent des relevés d'un joueur. Lignes, compagnies, taxes et amende
-  restent celles du jeu classique.
+- **Loyers** : quand on a tout un groupe, ses rues sans maison rapportent le double, ses rues
+  bâties (maisons ou tour) une fois et demie, arrondi au-dessus. Les rues reprennent Business
+  Tour, en milliers (on démarre avec 2 000, ses 2 millions) : prix, maisons, et une tour plus
+  chère qu'une maison (150 à 500, comme son hôtel). Les loyers viennent des relevés d'un joueur.
+  Lignes, compagnies, taxes et amende restent celles du jeu classique.
 - **Dette** : on vend, on hypothèque ou on échange pour payer, sinon c'est la faillite. Tout part
   alors au créancier, ou retourne à la banque.
 - **Échanges** : propriétés et argent dans les deux sens, à tout moment. On ne peut pas en
