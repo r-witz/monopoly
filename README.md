@@ -92,12 +92,12 @@ arrête et exclut, anti-flood, écriture non bloquante. Le protocole est décrit
 - **Fin** : au bout de N tours de table (par défaut 25), au bout de N minutes, ou au dernier
   survivant. Dans les deux premiers cas, le plus riche gagne (cash + propriétés + constructions).
 - On lance 2 dés. Un double fait rejouer, trois doubles envoient au poste de police. Pour sortir :
-  faire un double, payer 60 ou jouer une carte. Après 3 essais, l'amende est due de toute façon.
+  faire un double, payer 50 ou jouer une carte. Après 3 essais, l'amende est due de toute façon.
 - **Case libre** : on l'achète, ou une enchère s'ouvre pour tous. Elle se ferme quand tout le
   monde a passé, ou après N secondes sans nouvelle offre.
-- **Loyers** : doublés sur un groupe complet sans construction. Ensuite 3 niveaux de maisons puis
-  une tour, construits uniformément. Le loyer est tiré d'une même courbe de prix pour toutes les
-  rues.
+- **Loyers** : doublés sur un groupe complet sans construction. Ensuite 4 maisons puis
+  une tour, construites uniformément. Prix, loyers, constructions, taxes et amende reprennent les
+  chiffres du jeu classique, case pour case.
 - **Dette** : on vend, on hypothèque ou on échange pour payer, sinon c'est la faillite. Tout part
   alors au créancier, ou retourne à la banque.
 - **Échanges** : propriétés et argent dans les deux sens, à tout moment. On ne peut pas en

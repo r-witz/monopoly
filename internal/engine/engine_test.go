@@ -283,20 +283,20 @@ func TestAuction(t *testing.T) {
 	script(g, [2]int{1, 2})
 	must(t, g, 0, Action{Kind: "roll"}) // square 3, a street
 	must(t, g, 0, Action{Kind: "decline"})
-	if _, err := g.Apply(1, Action{Kind: "bid", Amount: 39}); err == nil {
-		t.Fatal("bid under half the price (80)")
+	if _, err := g.Apply(1, Action{Kind: "bid", Amount: 29}); err == nil {
+		t.Fatal("bid under half the price (60)")
 	}
-	if v := g.View(); v.Auction.Min != 40 {
-		t.Fatalf("min bid %d, want 40", v.Auction.Min)
+	if v := g.View(); v.Auction.Min != 30 {
+		t.Fatalf("min bid %d, want 30", v.Auction.Min)
 	}
-	must(t, g, 1, Action{Kind: "bid", Amount: 40})
+	must(t, g, 1, Action{Kind: "bid", Amount: 30})
 	if _, err := g.Apply(1, Action{Kind: "build", Square: 3}); err == nil {
 		t.Fatal("built during an auction")
 	}
-	must(t, g, 2, Action{Kind: "bid", Amount: 41})
+	must(t, g, 2, Action{Kind: "bid", Amount: 31})
 	must(t, g, 0, Action{Kind: "pass"})
 	ev := must(t, g, 1, Action{Kind: "pass"})
-	if !has(ev, "auctioned") || g.Deeds[3].Owner != 2 || g.Players[2].Cash != 1500-41 || g.Phase != PhaseEnd {
+	if !has(ev, "auctioned") || g.Deeds[3].Owner != 2 || g.Players[2].Cash != 1500-31 || g.Phase != PhaseEnd {
 		t.Fatalf("owner %d cash %d phase %s", g.Deeds[3].Owner, g.Players[2].Cash, g.Phase)
 	}
 }
@@ -320,6 +320,9 @@ func TestBoardLayout(t *testing.T) {
 	for i, s := range b.Squares {
 		if s.Kind != KindStreet {
 			continue
+		}
+		if len(s.Rent) != b.MaxLevel+1 || s.BuildCost <= 0 {
+			t.Fatalf("%s: %d rents (want %d), build cost %d", s.Name, len(s.Rent), b.MaxLevel+1, s.BuildCost)
 		}
 		if side, ok := sides[s.Group]; ok && side != i/10 {
 			t.Fatalf("group %d on sides %d and %d", s.Group, side, i/10)
