@@ -81,7 +81,7 @@ func (b *Board) unmortgage(sq int) int {
 // street builds a street of a group: its rent at each level comes from its price, the same
 // curve for every street.
 func street(name string, group, price int) Square {
-	mult := [...]int{10, 50, 140, 300, 420} // percent of the price, by level
+	mult := [...]int{20, 100, 250, 450, 650} // percent of the price, by level: an arcade game, rents bite
 	rent := make([]int, len(mult))
 	for i, m := range mult {
 		rent[i] = (price*m/100 + 2) / 5 * 5 // to the nearest 5
@@ -145,7 +145,7 @@ var Classic = &Board{
 	JailFine:      60,
 	JailTurns:     3,
 	MaxLevel:      4,
-	TransitRent:   []int{30, 60, 110, 180},
-	UtilityFactor: []int{5, 12},
+	TransitRent:   []int{40, 90, 180, 320},
+	UtilityFactor: []int{8, 20},
 	MortgageRate:  10,
 }
