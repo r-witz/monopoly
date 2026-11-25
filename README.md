@@ -100,9 +100,10 @@ arrête et exclut, anti-flood, écriture non bloquante. Le protocole est décrit
   faire un double, payer 50 ou jouer une carte. Après 3 essais, l'amende est due de toute façon.
 - **Case libre** : on l'achète, ou une enchère s'ouvre pour tous. Elle se ferme quand tout le
   monde a passé, ou après N secondes sans nouvelle offre.
-- **Loyers** : doublés sur un groupe complet sans construction. Ensuite 4 maisons puis
-  une tour, construites uniformément. Prix, loyers, constructions, taxes et amende reprennent les
-  chiffres du jeu classique, case pour case.
+- **Loyers** : doublés sur un groupe complet sans construction. Ensuite 3 maisons puis
+  une tour, construites uniformément. Les loyers des rues reprennent ceux de Business Tour (relevés
+  par un joueur, en milliers) ; prix, constructions, lignes, compagnies, taxes et amende ceux du
+  jeu classique.
 - **Dette** : on vend, on hypothèque ou on échange pour payer, sinon c'est la faillite. Tout part
   alors au créancier, ou retourne à la banque.
 - **Échanges** : propriétés et argent dans les deux sens, à tout moment. On ne peut pas en

@@ -300,7 +300,7 @@ function deed(app) {
   const head = s.kind === 'street' ? GROUP_COLORS[s.group] : '#2b2d42';
   let rows = '';
   if (s.kind === 'street') {
-    rows = [['Loyer', s.rent[0]], ['Groupe complet', s.rent[0] * 2], ['🏠', s.rent[1]], ['🏠🏠', s.rent[2]], ['🏠🏠🏠', s.rent[3]], ['🏠🏠🏠🏠', s.rent[4]], ['🏢 Tour', s.rent[5]]]
+    rows = [['Loyer', s.rent[0]], ['Groupe complet', s.rent[0] * 2], ['🏠', s.rent[1]], ['🏠🏠', s.rent[2]], ['🏠🏠🏠', s.rent[3]], ['🏢 Tour', s.rent[4]]]
       .map(([l, v], i) => `<tr class="${d && (i === 0 ? d.level === 0 : i >= 2 && d.level === i - 1) ? 'cur' : ''}"><td>${l}</td><td>${fmt(v)}</td></tr>`).join('') +
       `<tr class="sub"><td>Construction</td><td>${s.buildCost}</td></tr>`;
   } else if (s.kind === 'transit') {
