@@ -21,7 +21,7 @@ const (
 type Square struct {
 	Kind      Kind   `json:"kind"`
 	Name      string `json:"name"`
-	Group     int    `json:"group,omitempty"`     // streets: 1 to 8, the set to own whole to build
+	Group     int    `json:"group,omitempty"`     // streets: 1 to 8, the set to own whole for double rent and instant wins
 	Price     int    `json:"price,omitempty"`     // streets, transit, utilities
 	Rent      []int  `json:"rent,omitempty"`      // streets: by level, 0 (bare) to MaxLevel
 	BuildCost int    `json:"buildCost,omitempty"` // streets: one house; sold back for half

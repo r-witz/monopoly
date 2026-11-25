@@ -246,6 +246,35 @@ function players(app) {
   </div>`).join('');
 }
 
+// The levels of a street: 0 bare, then houses, b.maxLevel the tower.
+const LEVELS = ['Terrain', '🏠', '🏠🏠', '🏠🏠🏠', '🏢 Tour'];
+
+// reach is the highest level player me may build a street at level up to, on landing there (or
+// buying it, from 0): 2 houses before passing the start, then 3; the tower on a street at 3 houses.
+// The same as engine.Game.reach.
+function reach(b, me, level) {
+  if (level >= b.maxLevel - 1) return b.maxLevel;
+  return me.lapped ? b.maxLevel - 1 : Math.min(2, b.maxLevel - 1);
+}
+
+// builtCost is what the levels from+1 to to of street s cost together.
+function builtCost(b, s, from, to) {
+  let c = 0;
+  for (let l = from + 1; l <= to; l++) c += l === b.maxLevel ? s.towerCost : s.buildCost;
+  return c;
+}
+
+// levelButtons are the buttons to take street sq from level from to each level it may reach.
+function levelButtons(b, me, sq, a, from, base = 0) {
+  const s = b.squares[sq];
+  let html = '';
+  for (let l = from === 0 && a === 'buy' ? 0 : from + 1; l <= reach(b, me, from); l++) {
+    const cost = base + builtCost(b, s, from, l);
+    html += `<button class="btn big ${(a === 'buy' ? l === 0 : l === from + 1) ? 'main' : ''}" data-do="act" data-a="${a}" data-sq="${sq}" data-level="${l}" ${me.cash < cost ? 'disabled' : ''}>${LEVELS[l]} ${money(cost)}</button>`;
+  }
+  return html;
+}
+
 function actions(app) {
   const { nm } = names(app), g = app.game, b = app.board;
   const me = g.players.find(p => p.id === app.me);
@@ -259,19 +288,24 @@ function actions(app) {
   if (!me) return box(`Tu regardes la partie. À <b>${esc(nm(g.turn))}</b> de jouer.`);
   if (me.bankrupt) return box('Tu as fait faillite… La partie continue sans toi.');
   const mine = g.turn === app.me;
+  // standing on a street of mine I may build on, this landing only
+  const build = () => mine && g.here >= 0 && g.here === me.pos ? levelButtons(b, me, g.here, 'build', g.deeds.find(d => d.square === g.here).level) : '';
+  const buildInfo = () => build() ? `Construire sur <b>${esc(b.squares[g.here].name)}</b> ?` : '';
   switch (g.phase) {
     case 'roll':
       if (mine) {
         const again = g.doubles > 0 && !me.inJail;
         const info = again ? '<b>Double !</b> Tu relances les dés.' + (g.doubles === 2 ? ' <span class="warn">Encore un double et c\'est le poste de police.</span>' : '') :
           me.inJail ? 'Au poste : fais un double pour sortir, ou paie.' : '';
-        return box(info, btn('roll', again ? '🎲 Relancer les dés' : '🎲 Lancer les dés', 'main') + (me.inJail ? btn('payjail', 'Payer ' + b.jailFine) + (me.jailCards ? btn('jailcard', '🃏 Carte') : '') : ''), 'mine');
+        return box([info, buildInfo()].filter(Boolean).join(' '), build() + btn('roll', again ? '🎲 Relancer les dés' : '🎲 Lancer les dés', 'main') + (me.inJail ? btn('payjail', 'Payer ' + b.jailFine) + (me.jailCards ? btn('jailcard', '🃏 Carte') : '') : ''), 'mine');
       }
       if (g.doubles > 0) return box(`<b>${esc(nm(g.turn))}</b> a fait un double et relance les dés.`);
       break;
     case 'buy': if (mine) {
       const s = b.squares[me.pos];
-      return box(esc(s.name), btn('buy', 'Acheter ' + money(s.price), 'main') + btn('decline', 'Mettre aux enchères'), 'mine');
+      if (s.kind !== 'street') return box(esc(s.name), btn('buy', 'Acheter ' + money(s.price), 'main') + btn('decline', 'Mettre aux enchères'), 'mine');
+      const later = me.lapped ? '' : ' <span class="muted">(3 maisons après ton premier passage au Départ)</span>';
+      return box(`<b>${esc(s.name)}</b> : le terrain, ou avec des maisons ?${later}`, levelButtons(b, me, me.pos, 'buy', 0, s.price) + btn('decline', 'Mettre aux enchères'), 'mine');
     } break;
     case 'auction': {
       const a = g.auction;
@@ -288,7 +322,7 @@ function actions(app) {
       return box(`Tu dois <b>${fmt(g.debt.amount)}</b> à ${esc(nm(g.debt.to))} : vends ou hypothèque (clique tes propriétés), puis`,
         btn('pay', 'Payer', 'main') + btn('bankrupt', 'Faillite', 'danger'), 'mine');
     } break;
-    case 'end': if (mine) return box('', btn('end', 'Fin du tour ➜', 'main'), 'mine');
+    case 'end': if (mine) return box(buildInfo(), build() + btn('end', 'Fin du tour ➜', build() ? '' : 'main'), 'mine');
   }
   return box(`À <b>${esc(nm(g.turn))}</b> de jouer…`);
 }
@@ -313,7 +347,7 @@ function deed(app) {
   const me = g.players.find(p => p.id === app.me);
   if (d && d.owner === app.me && me && !me.bankrupt && g.phase !== 'over') {
     const a = (x, l) => `<button class="btn small" data-do="act" data-a="${x}" data-sq="${app.selected}">${l}</button>`;
-    if (s.kind === 'street') acts += a('build', '🏗 Construire') + a('sell', 'Revendre');
+    if (s.kind === 'street' && d.level > 0) acts += a('sell', 'Revendre un niveau');
     acts += d.mortgaged ? a('unmortgage', 'Lever l\'hypothèque') : a('mortgage', 'Hypothéquer');
   }
   return `<div class="glass deedcard">
@@ -390,7 +424,8 @@ export function rulesModal(app) {
       <li><b>À ton tour</b>, lance les dés et avance. Sur une case libre, achète-la, ou elle part aux enchères pour tout le monde.</li>
       <li><b>Un double</b> (les deux dés pareils) : après ton déplacement, tu relances. Au <b>3ᵉ double d'affilée</b>, direction le poste de police, sans bouger.</li>
       <li><b>Au poste</b>, pour sortir : fais un double, paie ${b.jailFine} ou joue une carte. Après ${b.jailTurns} essais, l'amende est due.</li>
-      <li><b>Loyers</b> : doublés quand tu as tout un groupe de couleur. Tu peux alors y construire des maisons, puis une tour, uniformément.</li>
+      <li><b>Maisons</b> : en achetant une rue, prends-la nue ou avec 1 ou 2 maisons (3 après ton premier passage au Départ). Ensuite, chaque fois que tu retombes sur ta rue, ajoute des maisons, sans avoir besoin de tout le groupe. La tour se construit sur une rue à 3 maisons, en y retombant.</li>
+      <li><b>Loyers</b> : doublés sur une rue sans maison quand tu as tout son groupe de couleur.</li>
       <li><b>Le Départ</b> rapporte ${s ? s.salary : 'un salaire'} à chaque passage.</li>
       <li><b>Une dette</b> : vends, hypothèque ou échange pour payer, sinon c'est la faillite.</li>
       <li><b>Échanges</b> : propriétés et argent, à tout moment, avec n'importe qui.</li>

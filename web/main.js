@@ -226,7 +226,7 @@ const handlers = {
   start: () => send({ t: 'start' }),
   stop: () => confirm('Arrêter la partie pour tout le monde ?') && send({ t: 'stop' }),
   kick: d => send({ t: 'kick', id: +d.id }),
-  act: d => act(d.a, { square: d.sq ? +d.sq : 0, trade: d.trade ? +d.trade : 0 }),
+  act: d => act(d.a, { square: d.sq ? +d.sq : 0, level: d.level ? +d.level : 0, trade: d.trade ? +d.trade : 0 }),
   bid: () => act('bid', { amount: app.bid }),
   bidQuick(d) { const a = app.game.auction; app.bid = (a.high || a.min) + +d.n; act('bid', { amount: app.bid }); },
   unselect() { app.selected = -1; scene.select(-1); hud.render(app); },

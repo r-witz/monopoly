@@ -100,8 +100,11 @@ arrête et exclut, anti-flood, écriture non bloquante. Le protocole est décrit
   faire un double, payer 50 ou jouer une carte. Après 3 essais, l'amende est due de toute façon.
 - **Case libre** : on l'achète, ou une enchère s'ouvre pour tous. Elle se ferme quand tout le
   monde a passé, ou après N secondes sans nouvelle offre.
-- **Loyers** : doublés sur un groupe complet sans construction. Ensuite 3 maisons puis
-  une tour, construites uniformément. Les rues reprennent Business Tour, en milliers (on démarre avec
+- **Maisons** : en achetant une rue, on la prend nue ou avec 1 ou 2 maisons (3 une fois passé
+  le Départ). Ensuite, on ajoute des maisons chaque fois qu'on retombe sur sa rue, une fois par
+  passage, sans avoir besoin du groupe complet. La tour se construit sur une rue à 3 maisons, en y
+  retombant. Une rue bâtie ne s'hypothèque pas et ne s'échange pas. Une enchère vend la rue nue.
+- **Loyers** : doublés sur une rue sans maison quand on a tout son groupe. Les rues reprennent Business Tour, en milliers (on démarre avec
   2 000, ses 2 millions) : prix, maisons, et une tour plus chère qu'une maison (150 à 500, comme
   son hôtel). Les loyers viennent des relevés d'un joueur. Lignes, compagnies, taxes et amende
   restent celles du jeu classique.

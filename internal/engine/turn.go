@@ -91,7 +91,7 @@ func (g *Game) returnJailCards(n int) {
 func (g *Game) jail(p int) {
 	pl := g.Players[p]
 	pl.Pos, pl.InJail, pl.JailTurns = g.Board.Jail, true, 0
-	g.again = false
+	g.again, g.here = false, -1
 	g.emit(Event{Kind: "jailed", Who: pl.ID, Square: pl.Pos})
 }
 
@@ -103,10 +103,12 @@ func (g *Game) free(p, fine int) {
 }
 
 // advance moves p by steps (backwards when negative), with the salary when passing or landing
-// on the start going forward, and plays the square reached.
+// on the start going forward (p has then made a lap), and plays the square reached.
 func (g *Game) advance(p, steps int) {
 	pl, n := g.Players[p], len(g.Board.Squares)
+	g.here = -1
 	if steps > 0 && pl.Pos+steps >= n {
+		pl.Lapped = true
 		g.transfer(-1, p, g.Rules.Salary)
 		g.emit(Event{Kind: "salary", Who: pl.ID, Amount: g.Rules.Salary})
 	}
@@ -130,7 +132,12 @@ func (g *Game) land(p int) {
 		switch {
 		case d.Owner < 0:
 			g.setPhase(PhaseBuy)
-		case d.Owner == p || d.Mortgaged:
+		case d.Owner == p:
+			if sq.Kind == KindStreet && !d.Mortgaged && g.reach(p, d.Level) > d.Level {
+				g.here = pl.Pos
+			}
+			g.settle()
+		case d.Mortgaged:
 			g.settle()
 		default:
 			rent := g.rent(pl.Pos)
