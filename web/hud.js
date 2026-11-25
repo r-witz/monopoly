@@ -50,7 +50,15 @@ export function describe(app, e) {
 
 // --- render, keeping the field being typed in ------------------------------------------------
 
+// hold keeps the screen as it is while a button is pressed: drawn again under the finger, it
+// would never get its click. What came meanwhile is drawn on release.
+export function hold(on) {
+  render.held = on;
+  if (!on && render.pending) { const app = render.pending; render.pending = null; render(app); }
+}
+
 export function render(app) {
+  if (render.held) { render.pending = app; return; }
   const f = document.activeElement, fid = f && f.id;
   let caret = null;
   try { caret = [f.selectionStart, f.selectionEnd]; } catch { }
@@ -58,8 +66,12 @@ export function render(app) {
   $('front').hidden = !!inGame || !app.board;
   $('hud').hidden = !inGame;
   if (!app.board) return;
-  if (!inGame) $('front').innerHTML = app.room ? roomScreen(app) : homeScreen(app);
-  else {
+  if (!inGame) {
+    // drawn again only when it changed: a button being pressed is not swapped under the finger
+    const front = app.room ? roomScreen(app) : homeScreen(app);
+    if (front !== render.front) $('front').innerHTML = render.front = front;
+  } else {
+    render.front = '';
     $('top').innerHTML = top(app);
     $('players').innerHTML = players(app);
     $('actions').innerHTML = actions(app);
@@ -67,9 +79,12 @@ export function render(app) {
     $('deed').hidden = app.selected < 0;
     $('trades').innerHTML = trades(app);
     renderLog(app);
-    $('modal').innerHTML = app.modal ? app.modal(app) : '';
-    $('modal').hidden = !app.modal;
   }
+  // the window is drawn again only when what it shows changed: its animations and the button
+  // being pressed are left alone
+  const modal = app.modal ? app.modal(app) : '';
+  if (modal !== render.modal) $('modal').innerHTML = render.modal = modal;
+  $('modal').hidden = !app.modal;
   if (fid && $(fid)) {
     $(fid).focus();
     try { if (caret && caret[0] != null) $(fid).setSelectionRange(...caret); } catch { }
@@ -98,62 +113,97 @@ export function tick(app) {
 
 // --- before a game ---------------------------------------------------------------------------
 
+const ball = (c, cls = '') => `<i class="ball ${cls}" style="--c:${c}"></i>`;
+
+// the name and the color of the player, on the home and in the room: a color another player of the
+// room has is not to be taken
+function profile(app) {
+  const mine = app.room?.players.find(p => p.id === app.me);
+  const color = mine ? mine.color : app.myColor;
+  const taken = new Set((app.room?.players || []).filter(p => p.id !== app.me).map(p => p.color));
+  return `<div class="who">${ball(app.colors[color] || '#999', 'big')}<input id="name" class="field" maxlength="16" value="${esc(app.myName || '')}" placeholder="Ton pseudo" autocomplete="nickname" spellcheck="false"></div>
+    <div class="swatches">${app.colors.map((c, i) => `<button class="ball ${i === color ? 'on' : ''} ${taken.has(i) ? 'taken' : ''}" style="--c:${c}" data-do="color" data-i="${i}"
+      aria-label="couleur ${i + 1}" ${taken.has(i) ? 'disabled' : ''}></button>`).join('')}</div>`;
+}
+
 function homeScreen(app) {
-  const list = app.rooms == null ? '' : app.rooms.length === 0 ? '<p class="muted">Aucune salle publique pour l\'instant.</p>' :
-    app.rooms.map(r => `<div class="row"><span>${esc(r.name || 'Salle ' + r.code)}</span><span class="muted">${r.players}/${r.max}${r.playing ? ' · en jeu' : ''}</span>
-      <button class="btn small" data-do="joinListed" data-code="${r.code}">Entrer</button></div>`).join('');
-  return `<div class="panel home">
-    <h1 class="logo">Quartiers</h1>
-    <p class="tagline">Achète, construis, négocie… et ruine tes amis.</p>
-    <section><h2>Ton joueur</h2>
-      <div class="who"><i class="token big" style="--c:${app.colors[app.myColor] || '#999'}"></i>
-      <input id="name" class="field" maxlength="16" value="${esc(app.myName || '')}" placeholder="Ton pseudo"></div>
-      <div class="swatches">${app.colors.map((c, i) => `<button class="swatch ${i === app.myColor ? 'on' : ''}" style="--c:${c}" data-do="color" data-i="${i}" aria-label="couleur ${i + 1}"></button>`).join('')}</div>
-    </section>
-    <section class="play">
-      <button class="btn big main" data-do="create">Créer une salle</button>
-      <div class="join"><input id="code" class="field code" maxlength="5" placeholder="CODE"><button class="btn big" data-do="join">Rejoindre</button></div>
-    </section>
-    <section><h2>Salles publiques <button class="btn small" data-do="rooms">↻</button></h2>${list}</section>
+  const list = !app.rooms?.length ? '<p class="empty">Aucune salle publique pour l\'instant.</p>' :
+    '<ul class="rooms">' + app.rooms.map(r => `<li><span class="nm">${esc(r.name || 'Salle ' + r.code)}</span><span class="tag ${r.playing ? 'live' : 'open'}">${r.playing ? 'en jeu' : 'au salon'}</span>
+      <span class="count">${r.players}/${r.max}</span><button class="btn small sun" data-do="joinListed" data-code="${r.code}">Entrer</button></li>`).join('') + '</ul>';
+  return `<div class="home">
+    <header class="brand"><h1 class="logo">Quartiers</h1><p class="tagline">Achète, construis, négocie… et ruine tes amis.</p></header>
+    <div class="stack">
+      <section class="card me"><h2>Ton joueur</h2>${profile(app)}</section>
+      <section class="card"><h2>Jouer</h2><div class="stack">
+        <button class="btn red big" data-do="create">Créer une salle</button>
+        <div class="row"><input id="code" class="field code" maxlength="5" placeholder="CODE" value="${esc(app.code || '')}" autocomplete="off" spellcheck="false"><button class="btn sun" data-do="join">Rejoindre</button></div>
+        <button class="link" data-do="rules">Comment on joue ?</button>
+      </div></section>
+    </div>
+    <section class="card list-card"><h2>Salles publiques</h2>${list}</section>
   </div>`;
 }
+
+// the bounds of the numbers of the room, and the step of their − and + (the server keeps them in bounds too)
+export const LIMITS = { rounds: [5, 200, 5], minutes: [5, 240, 5], startCash: [500, 5000, 100], salary: [0, 1000, 20],
+  turnSeconds: [10, 300, 5], auctionSeconds: [5, 60, 1], max: [2, 8, 1] };
+
+// stepper is a number of the settings: − and + around it for the owner, the number alone for the others
+function stepper(k, s, owner, unit = '') {
+  if (!owner) return `<span class="v">${fmt(s[k])}${unit}</span>`;
+  const [lo, hi] = LIMITS[k];
+  return `<span class="stepper"><button data-do="step" data-k="${k}" data-d="-1" ${s[k] <= lo ? 'disabled' : ''} aria-label="moins">−</button>
+    <span class="val"><input type="number" id="set-${k}" data-set="${k}" value="${s[k]}" min="${lo}" max="${hi}">${unit ? '<span class="unit">' + unit + '</span>' : ''}</span>
+    <button data-do="step" data-k="${k}" data-d="1" ${s[k] >= hi ? 'disabled' : ''} aria-label="plus">+</button></span>`;
+}
+
+// seg is a choice between a few values, the one taken pressed
+function seg(k, options, value) {
+  return '<span class="seg">' + options.map(([v, l]) => `<button data-do="seg" data-k="${k}" data-v="${v}" aria-pressed="${v === value}">${l}</button>`).join('') + '</span>';
+}
+
+const END = [['rounds', 'Tours'], ['time', 'Temps'], ['survivor', 'Survivant']];
+const END_HINT = { rounds: 'le plus riche après N tours de table', time: 'le plus riche quand le temps est écoulé', survivor: 'le dernier à ne pas avoir fait faillite' };
 
 function settingsForm(app, owner) {
   const s = owner ? app.draft : app.room.settings;
-  const dis = owner ? '' : 'disabled';
-  const num = (k, label, step = 1) => `<label><span>${label}</span><input class="field" type="number" step="${step}" id="set-${k}" data-set="${k}" value="${s[k]}" ${dis}></label>`;
-  return `<div class="settings">
-    <label><span>Fin de partie</span><select class="field" id="set-end" data-set="end" ${dis}>
-      ${[['rounds', 'Nombre de tours'], ['time', 'Temps limité'], ['survivor', 'Dernier survivant']].map(([v, l]) =>
-        `<option value="${v}" ${s.end === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-    ${s.end === 'rounds' ? num('rounds', 'Tours') : s.end === 'time' ? num('minutes', 'Minutes') : ''}
-    ${num('startCash', 'Argent de départ', 100)}${num('salary', 'Salaire au Départ', 10)}
-    ${num('max', 'Joueurs max')}
-    ${num('turnSeconds', 'Secondes par décision')}${num('auctionSeconds', 'Secondes par enchère')}
-    <label class="check"><input type="checkbox" id="set-public" data-set="public" ${s.public ? 'checked' : ''} ${dis}> Salle publique</label>
-  </div>`;
+  const row = (label, ctl, hint = '') => `<div class="set"><span class="k">${label}${hint ? '<small>' + hint + '</small>' : ''}</span>${ctl}</div>`;
+  return [
+    row('Fin de partie', owner ? seg('end', END, s.end) : `<span class="v">${END.find(e => e[0] === s.end)[1]}</span>`, END_HINT[s.end]),
+    s.end === 'rounds' ? row('Tours de table', stepper('rounds', s, owner)) : s.end === 'time' ? row('Durée', stepper('minutes', s, owner, ' min')) : '',
+    row('Argent de départ', stepper('startCash', s, owner)),
+    row('Salaire au Départ', stepper('salary', s, owner)),
+    row('Temps pour décider', stepper('turnSeconds', s, owner, ' s'), 'puis le jeu joue à ta place'),
+    row('Temps par enchère', stepper('auctionSeconds', s, owner, ' s'), 'sans nouvelle offre'),
+  ].join('');
 }
 
 function roomScreen(app) {
-  const { nm } = names(app);
-  const owner = app.room.owner === app.me;
-  const link = location.origin + location.pathname + '#' + app.room.code;
-  return `<div class="panel room">
-    <h1 class="logo small">Quartiers</h1>
-    <div class="code-box"><span class="muted">Code de la salle</span><b>${app.room.code}</b>
-      <button class="btn small" data-do="copy" data-text="${esc(link)}">Copier le lien</button></div>
-    <div class="cols">
-      <section><h2>Joueurs</h2>
-        ${app.room.players.map(p => `<div class="row"><i class="token" style="--c:${app.colors[p.color]}"></i>
-          <span class="grow">${esc(nm(p.id))}${p.id === app.me ? ' <span class="muted">(toi)</span>' : ''}${p.id === app.room.owner ? ' 👑' : ''}${p.connected ? '' : ' <span class="muted">absent</span>'}</span>
-          ${owner && p.id !== app.me ? `<button class="btn small" data-do="kick" data-id="${p.id}">Exclure</button>` : ''}</div>`).join('')}
-      </section>
-      <section><h2>Règles</h2>${settingsForm(app, owner)}</section>
+  const { nm } = names(app), r = app.room, owner = r.owner === app.me, s = owner ? app.draft : r.settings;
+  const link = location.origin + location.pathname + '#' + r.code;
+  const here = r.players.filter(p => p.connected).length;
+  const seats = r.players.map(p => `<li class="${p.id === app.me ? 'mine' : ''} ${p.connected ? '' : 'away'}">${ball(app.colors[p.color])}
+      <span class="nm">${esc(nm(p.id))}</span>${p.connected ? '' : '<small>absent</small>'}${p.id === r.owner ? '<span class="crown" title="crée la partie">👑</span>' : ''}
+      ${owner && p.id !== app.me ? `<button class="x" data-do="kick" data-id="${p.id}" title="Exclure ${esc(nm(p.id))}">✕</button>` : ''}</li>`).join('') +
+    '<li class="free"></li>'.repeat(Math.max(0, s.max - r.players.length));
+  return `<div class="lobby">
+    <section class="card top">
+      <span class="brand-mini">Quartiers</span>
+      ${owner ? `<input id="room-name" class="field name" data-set="name" maxlength="24" value="${esc(s.name || '')}" placeholder="Salle ${r.code}" aria-label="Nom de la salle">`
+        : `<h2 class="name">${esc(r.name || 'Salle ' + r.code)}</h2>`}
+      ${owner ? seg('public', [[false, '🔒 Privée'], [true, '🌐 Publique']], s.public) : `<span class="state">${r.settings.public ? '🌐 Publique' : '🔒 Privée'}</span>`}
+      <div class="ticket"><span>Code</span><b>${r.code}</b></div>
+      <button class="btn sun small" data-do="copy" data-text="${esc(link)}">Copier le lien</button>
+      <button class="btn small" data-do="leave">Quitter</button>
+    </section>
+    <div class="side">
+      <section class="card me"><h2>Ton joueur</h2>${profile(app)}</section>
+      <section class="card players"><div class="phead"><h2>Joueurs ${here}/${s.max}</h2>${owner ? stepper('max', s, true) : ''}</div><ul class="seats">${seats}</ul></section>
     </div>
-    <div class="bar">
-      <button class="btn" data-do="leave">Quitter</button>
-      ${owner ? '<button class="btn big main" data-do="start">Lancer la partie</button>' : '<span class="muted">Le créateur 👑 lance la partie.</span>'}
-    </div>
+    <section class="card settings"><h2>La partie</h2>${settingsForm(app, owner)}
+      <button class="link" data-do="rules">Comment on joue ?</button>
+      <div class="go">${owner ? '<button class="btn red big" data-do="start">Lancer la partie</button>' : '<p class="waiting">👑 Le créateur de la salle lance la partie</p>'}</div>
+    </section>
   </div>`;
 }
 
@@ -166,6 +216,7 @@ function top(app) {
     ${app.endsAt ? '<span class="pill">⏳ <b id="endclock"></b></span>' : ''}
     <span class="pill muted">Salle ${app.room.code}</span>
     <span class="grow"></span>
+    <button class="btn small" data-do="rules" title="Comment on joue">?</button>
     ${owner && g.phase !== 'over' ? '<button class="btn small" data-do="stop">Arrêter</button>' : ''}
     <button class="btn small" data-do="leave">Quitter</button>
   </div>`;
@@ -202,7 +253,13 @@ function actions(app) {
   const mine = g.turn === app.me;
   switch (g.phase) {
     case 'roll':
-      if (mine) return box('', btn('roll', '🎲 Lancer les dés', 'main') + (me.inJail ? btn('payjail', 'Payer ' + b.jailFine) + (me.jailCards ? btn('jailcard', '🃏 Carte') : '') : ''), 'mine');
+      if (mine) {
+        const again = g.doubles > 0 && !me.inJail;
+        const info = again ? '<b>Double !</b> Tu relances les dés.' + (g.doubles === 2 ? ' <span class="warn">Encore un double et c\'est le poste de police.</span>' : '') :
+          me.inJail ? 'Au poste : fais un double pour sortir, ou paie.' : '';
+        return box(info, btn('roll', again ? '🎲 Relancer les dés' : '🎲 Lancer les dés', 'main') + (me.inJail ? btn('payjail', 'Payer ' + b.jailFine) + (me.jailCards ? btn('jailcard', '🃏 Carte') : '') : ''), 'mine');
+      }
+      if (g.doubles > 0) return box(`<b>${esc(nm(g.turn))}</b> a fait un double et relance les dés.`);
       break;
     case 'buy': if (mine) {
       const s = b.squares[me.pos];
@@ -282,7 +339,7 @@ export function tradeModal(app) {
     return `<label class="chip ${t[key].includes(d.square) ? 'on' : ''}" style="--c:${s.group ? GROUP_COLORS[s.group] : '#2b2d42'}">
       <input type="checkbox" data-trade-sq="${key}" value="${d.square}" ${t[key].includes(d.square) ? 'checked' : ''}>${esc(s.name)}</label>`;
   }).join('') || '<span class="muted">aucune propriété</span>';
-  return `<div class="panel modalbox trade-editor">
+  return `<div class="card modalbox trade-editor">
     <h2>Proposer un échange</h2>
     <div class="row">avec ${others.map(o => `<button class="btn small ${o.id === t.to ? 'main' : ''}" data-do="tradeTo" data-id="${o.id}"><i class="token" style="--c:${colorOf(o.id)}"></i> ${esc(nm(o.id))}</button>`).join('')}</div>
     <div class="cols">
@@ -295,12 +352,40 @@ export function tradeModal(app) {
 
 export function overModal(app) {
   const { nm, colorOf } = names(app), g = app.game;
-  const medals = ['🥇', '🥈', '🥉'];
-  return `<div class="panel modalbox podium">
-    <h1 class="logo small">🏆 ${esc(nm(g.winner))} gagne !</h1>
-    <div class="ranks">${g.ranking.map((id, i) => { const p = g.players.find(x => x.id === id); return `<div class="row rank"><span class="medal">${medals[i] || i + 1}</span>
-      <i class="token" style="--c:${colorOf(id)}"></i><b class="grow">${esc(nm(id))}</b>${p.bankrupt ? '<span class="muted">faillite</span>' : money(p.worth)}</div>`; }).join('')}</div>
-    <div class="bar"><button class="btn" data-do="closeModal">Voir le plateau</button><button class="btn big main" data-do="lobby">Retour au salon</button></div>
+  const p = id => g.players.find(x => x.id === id);
+  const worth = id => p(id).bankrupt ? '<span class="muted">faillite</span>' : money(p(id).worth);
+  const top = g.ranking.slice(0, 3);
+  const step = i => top[i] === undefined ? '' : `<div class="step p${i + 1}"><div class="who">${ball(colorOf(top[i]), 'big')}<b>${esc(nm(top[i]))}</b>${worth(top[i])}</div>
+    <div class="block">${i + 1}</div></div>`;
+  const rest = g.ranking.slice(3).map((id, i) => `<li><span class="rk">${i + 4}</span>${ball(colorOf(id))}<span class="nm">${esc(nm(id))}</span>${worth(id)}</li>`).join('');
+  return `<div class="card modalbox podium">
+    <h2 class="title">🏆 ${esc(nm(g.winner))} gagne !</h2>
+    <div class="steps">${step(1)}${step(0)}${step(2)}</div>
+    ${rest ? '<ol class="rest">' + rest + '</ol>' : ''}
+    <div class="bar"><button class="btn" data-do="closeModal">Voir le plateau</button><button class="btn red big" data-do="lobby">Retour au salon</button></div>
+  </div>`;
+}
+
+// rulesModal is how the game is played, in short
+export function rulesModal(app) {
+  const s = app.room?.settings, b = app.board;
+  const end = !s ? 'au bout d\'un nombre de tours ou d\'un temps choisi, le plus riche gagne ; ou au dernier survivant' :
+    s.end === 'rounds' ? 'après ' + s.rounds + ' tours de table, le plus riche gagne (argent, propriétés et constructions)' :
+    s.end === 'time' ? 'au bout de ' + s.minutes + ' minutes, le plus riche gagne (argent, propriétés et constructions)' : 'le dernier joueur à ne pas avoir fait faillite gagne';
+  return `<div class="card modalbox rules">
+    <h2>Comment on joue</h2>
+    <ul>
+      <li><b>À ton tour</b>, lance les dés et avance. Sur une case libre, achète-la, ou elle part aux enchères pour tout le monde.</li>
+      <li><b>Un double</b> (les deux dés pareils) : après ton déplacement, tu relances. Au <b>3ᵉ double d'affilée</b>, direction le poste de police, sans bouger.</li>
+      <li><b>Au poste</b>, pour sortir : fais un double, paie ${b.jailFine} ou joue une carte. Après ${b.jailTurns} essais, l'amende est due.</li>
+      <li><b>Loyers</b> : doublés quand tu as tout un groupe de couleur. Tu peux alors y construire des maisons, puis une tour, uniformément.</li>
+      <li><b>Le Départ</b> rapporte ${s ? s.salary : 'un salaire'} à chaque passage.</li>
+      <li><b>Une dette</b> : vends, hypothèque ou échange pour payer, sinon c'est la faillite.</li>
+      <li><b>Échanges</b> : propriétés et argent, à tout moment, avec n'importe qui.</li>
+      <li><b>Minuteur</b> : si tu tardes, le jeu joue à ta place.</li>
+      <li><b>Fin</b> : ${end}.</li>
+    </ul>
+    <div class="bar"><span></span><button class="btn sun" data-do="closeModal">Compris !</button></div>
   </div>`;
 }
 

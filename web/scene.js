@@ -302,6 +302,17 @@ const PAWN_BODY = pawnShape(), PAWN_HEAD = new THREE.SphereGeometry(0.105, 20, 1
 
 // --- easing and timing -----------------------------------------------------------------------
 
+// pack places the k-th of n pawns around the middle of a tile: one in the middle, then side by
+// side, in a triangle, in a square, and in two rows from five on
+function pack(k, n) {
+  if (n <= 1) return [0, 0];
+  if (n === 2) return [k ? 0.15 : -0.15, 0];
+  if (n === 3) return [[-0.15, -0.13], [0.15, -0.13], [0, 0.14]][k];
+  const per = Math.ceil(n / 2), row = k < per ? 0 : 1, inRow = row ? n - per : per, i = row ? k - per : k;
+  const gap = n <= 4 ? 0.3 : 0.22;
+  return [(i - (inRow - 1) / 2) * gap, (row - 0.5) * 0.32];
+}
+
 const ease = t => 1 - Math.pow(1 - t, 3);
 const easeInOut = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 const back = t => { const c = 1.7; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); };
@@ -635,21 +646,25 @@ export class Scene {
 
   // --- pawns ---
 
-  // slot is where a pawn stands on square sq: its seat's place on the tile
-  slot(sq, seat, jailed) {
+  // spot is where pawn p stands on square sq: alone in the middle of the tile, with others
+  // gathered around its middle, in the order of their seats
+  spot(p, sq, jail) {
+    const here = [...this.pawns.values()].filter(o => o === p || (!o.out && o.pos === sq && o.jail === jail)).sort((a, b) => a.seat - b.seat);
+    return this.slot(sq, here.indexOf(p), here.length, jail);
+  }
+
+  // slot is the place of the k-th of n pawns on square sq
+  slot(sq, k, n, jailed) {
     const t = this.tiles[sq];
     let x, z;
-    if (!t.corner) {
-      x = -0.33 + (seat % 4) * 0.22;
-      z = 0.05 + Math.floor(seat / 4) * 0.36;
-    } else if (jailed) {
-      x = -0.62 + (seat % 3) * 0.22;
-      z = -0.62 + Math.floor(seat / 3) * 0.22;
-    } else if (this.board.squares[sq].kind === 'jail') {
-      [x, z] = [[0.5, -0.55], [0.5, -0.2], [0.5, 0.15], [0.5, 0.5], [0.15, 0.5], [-0.2, 0.5], [-0.55, 0.5], [0.2, 0.2]][seat % 8];
+    if (!jailed && this.board.squares[sq].kind === 'jail') {
+      // visiting: along the outer edges, around the cell
+      [x, z] = [[0.5, -0.2], [-0.2, 0.5], [0.5, 0.15], [0.15, 0.5], [0.5, -0.55], [-0.55, 0.5], [0.5, 0.5], [0.2, 0.2]][k % 8];
     } else {
-      x = -0.4 + (seat % 3) * 0.4;
-      z = -0.4 + Math.floor(seat / 3) * 0.4;
+      const [cx, cz, scale] = !t.corner ? [0, 0.12, 1] : jailed ? [-0.4, -0.42, 0.85] : [0, 0, 1.6];
+      const [ox, oz] = pack(k, n);
+      x = cx + ox * scale;
+      z = cz + oz * scale;
     }
     t.g.updateMatrixWorld();
     const p = new THREE.Vector3(x, TOP, z).applyMatrix4(t.g.matrixWorld);
@@ -678,12 +693,23 @@ export class Scene {
 
   place(p, sq, jail) {
     p.pos = sq; p.jail = jail;
-    p.g.position.copy(this.slot(sq, p.seat, jail));
+    p.g.position.copy(this.spot(p, sq, jail));
+  }
+
+  // gather slides the pawns standing on square sq to their places, when one came or left
+  gather(sq, secs = 0.25) {
+    const jobs = [];
+    for (const p of this.pawns.values()) {
+      if (p.out || p.pos !== sq) continue;
+      const from = p.g.position.clone(), dest = this.spot(p, sq, p.jail);
+      if (from.distanceToSquared(dest) > 1e-6) jobs.push(this.tween(secs, t => p.g.position.lerpVectors(from, dest, ease(t))));
+    }
+    return Promise.all(jobs);
   }
 
   // hop moves a pawn one square on, in an arc
   async hop(p, to, secs, height = 0.45) {
-    const from = p.g.position.clone(), dest = this.slot(to, p.seat, false);
+    const from = p.g.position.clone(), dest = this.spot(p, to, false);
     await this.tween(secs, t => {
       p.g.position.lerpVectors(from, dest, t);
       p.g.position.y = TOP + Math.sin(t * Math.PI) * height;
@@ -702,19 +728,25 @@ export class Scene {
     const steps = back ? (p.pos - to + n) % n : (to - p.pos + n) % n;
     if (steps === 0) return;
     const secs = Math.max(0.09, Math.min(0.22, 2.4 / steps));
+    const start = p.pos, wasJailed = p.jail;
+    p.jail = false;
     for (let i = 0; i < steps; i++) {
       const next = (p.pos + (back ? -1 : 1) + n) % n;
-      this.focus(this.slot(next, p.seat, false), 12);
+      this.focus(this.spot(p, next, false), 12);
       await this.hop(p, next, secs);
+      if (i === 0 && !wasJailed) this.gather(start);
     }
-    p.jail = false;
+    if (wasJailed) this.gather(start);
+    await this.gather(to);
   }
 
   // jump sends a pawn straight to a square (to jail: into the cell)
   async jump(id, to, jail) {
     const p = this.pawns.get(id);
     if (!p) return;
-    const from = p.g.position.clone(), dest = this.slot(to, p.seat, jail);
+    const left = p.pos, from = p.g.position.clone(), dest = this.spot(p, to, jail);
+    p.pos = -1; // in the air: off the square it left
+    this.gather(left);
     this.focus(dest, 12);
     await this.tween(0.7, t => {
       p.g.position.lerpVectors(from, dest, easeInOut(t));
@@ -722,6 +754,7 @@ export class Scene {
       p.g.rotation.y = t * Math.PI * 2;
     });
     p.pos = to; p.jail = jail;
+    await this.gather(to);
   }
 
   setCurrent(id) {
@@ -865,6 +898,7 @@ export class Scene {
     p.out = true;
     await this.tween(0.8, t => { p.g.position.y = TOP - t * 0.8; p.g.rotation.z = t * 0.6; });
     p.g.visible = false;
+    await this.gather(p.pos);
   }
 
   removePawn(id) {
@@ -895,6 +929,8 @@ export class Scene {
       }
       this.cash.set(pl.id, pl.cash);
     });
+    // everyone in their place, now that they all are on their squares
+    for (const p of this.pawns.values()) if (!p.out && p.pos >= 0) p.g.position.copy(this.spot(p, p.pos, p.jail));
     const owned = new Map(state.deeds.map(d => [d.square, d]));
     this.board.squares.forEach((sq, i) => {
       if (!sq.price) return;

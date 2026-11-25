@@ -45,6 +45,7 @@ type View struct {
 	Round     int          `json:"round"`     // from 1
 	MaxRounds int          `json:"maxRounds"` // 0: none
 	Dice      [2]int       `json:"dice"`      // the last roll
+	Doubles   int          `json:"doubles"`   // doubles in a row this turn: the player rolls again after one, the third sends them to jail
 	Players   []PlayerView `json:"players"`   // in the order they play
 	Deeds     []DeedView   `json:"deeds"`     // the squares someone owns
 	Auction   *AuctionView `json:"auction,omitempty"`
@@ -92,7 +93,7 @@ type TradeView struct {
 }
 
 func (g *Game) View() View {
-	v := View{Phase: g.Phase, Turn: g.id(g.Turn), Round: g.Round, MaxRounds: g.Rules.MaxRounds, Dice: g.Dice,
+	v := View{Phase: g.Phase, Turn: g.id(g.Turn), Round: g.Round, MaxRounds: g.Rules.MaxRounds, Dice: g.Dice, Doubles: g.Doubles,
 		Deeds: []DeedView{}, Trades: []TradeView{}, Winner: g.id(g.Winner)}
 	for i, p := range g.Players {
 		v.Players = append(v.Players, PlayerView{p.ID, p.Cash, p.Pos, p.InJail, p.JailTurns, p.JailCards, p.Bankrupt, g.Worth(i)})

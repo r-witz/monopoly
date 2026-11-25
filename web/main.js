@@ -50,14 +50,21 @@ async function receive(m) {
         scene.onPick = sq => { app.selected = sq; scene.select(sq); hud.render(app); };
       }
       if (!app.room && location.hash.length > 1) send({ t: 'join', code: location.hash.slice(1) });
+      else if (!app.room) send({ t: 'rooms' });
       break;
-    case 'rooms': app.rooms = m.rooms; break;
-    case 'room':
+    case 'rooms':
+      if (JSON.stringify(m.rooms) === JSON.stringify(app.rooms)) return; // nothing new: the field being typed in is left alone
+      app.rooms = m.rooms;
+      break;
+    case 'room': {
+      const wasOwner = app.room?.owner === app.me;
       app.room = m;
-      if (!app.draft) app.draft = { ...m.settings, name: m.name };
+      // the owner's settings are theirs, sent as they change them; the others see the room's
+      if (m.owner !== app.me || !wasOwner || !app.draft) app.draft = { ...m.settings, name: m.name };
       history.replaceState(null, '', '#' + m.code);
       if (app.game && !busy) scene.sync(app.game, hud.names(app).colorOf, false);
       break;
+    }
     case 'game':
       queue.push({ m, at: Date.now() });
       pump();
@@ -72,6 +79,7 @@ async function receive(m) {
       leaveGame();
       app.room = app.draft = null;
       history.replaceState(null, '', location.pathname);
+      send({ t: 'rooms' });
       if (m.reason === 'kicked') hud.toast('Tu as été exclu de la salle.');
       if (m.reason === 'closed') hud.toast('La salle a fermé.');
       break;
@@ -87,6 +95,7 @@ async function receive(m) {
 function leaveGame() {
   epoch++;
   app.game = null; app.modal = null; app.selected = -1; app.seq = 0;
+  document.getElementById('card').hidden = true;
   if (scene) { scene.reset(); scene.idle = true; scene.overview(); scene.select(-1); }
 }
 
@@ -131,10 +140,17 @@ async function play({ m, at }) {
         scene.setCurrent(e.who);
         if (!scene.fast) hud.banner(e.who === app.me ? '🎲 À toi de jouer !' : 'Au tour de <b>' + hud.esc(nm(e.who)) + '</b>', 1.2);
         break;
-      case 'rolled':
+      case 'rolled': {
+        // what was the state before this roll says what the double does
+        const before = app.game.players.find(p => p.id === e.who);
         await scene.rollDice(e.dice);
-        if (e.dice[0] === e.dice[1] && !scene.fast) hud.banner('Double !', 0.8);
+        if (e.dice[0] === e.dice[1] && !scene.fast) {
+          const who = e.who === app.me ? 'Tu' : '<b>' + hud.esc(nm(e.who)) + '</b>';
+          hud.banner(before?.inJail ? 'Double ! ' + who + ' sor' + (e.who === app.me ? 's' : 't') + ' du poste' :
+            app.game.doubles >= 2 ? '3ᵉ double…' : 'Double ! ' + who + ' rejoue' + (e.who === app.me ? 's' : ''), 1.1);
+        }
         break;
+      }
       case 'moved':
         await scene.movePawn(e.who, e.square, card && card.effect === 'moveBy' && card.amount < 0);
         card = null;
@@ -168,6 +184,10 @@ async function play({ m, at }) {
 }
 
 setInterval(() => hud.tick(app), 250);
+// the public rooms, kept fresh while on the home
+const askRooms = () => { if (app.board && !app.room && !document.hidden) send({ t: 'rooms' }); };
+setInterval(askRooms, 3000);
+document.addEventListener('visibilitychange', askRooms);
 
 // --- clicks and typing -----------------------------------------------------------------------
 
@@ -189,6 +209,18 @@ const handlers = {
     send({ t: 'leave' });
   },
   settings() { const { name, ...settings } = app.draft; send({ t: 'settings', name, settings }); },
+  step(d) {
+    const [lo, hi, step] = hud.LIMITS[d.k];
+    app.draft[d.k] = Math.max(lo, Math.min(hi, (+app.draft[d.k] || 0) + step * +d.d));
+    handlers.settings();
+    hud.render(app);
+  },
+  seg(d) {
+    app.draft[d.k] = d.v === 'true' ? true : d.v === 'false' ? false : d.v;
+    handlers.settings();
+    hud.render(app);
+  },
+  rules() { app.modal = hud.rulesModal; hud.render(app); },
   start: () => send({ t: 'start' }),
   stop: () => confirm('Arrêter la partie pour tout le monde ?') && send({ t: 'stop' }),
   kick: d => send({ t: 'kick', id: +d.id }),
@@ -218,13 +250,17 @@ function saveName() {
   send({ t: 'profile', name: app.myName, color: app.myColor });
 }
 
+document.addEventListener('pointerdown', e => { if (e.target.closest('[data-do]')) hud.hold(true); }, true);
+for (const type of ['pointerup', 'pointercancel']) document.addEventListener(type, () => setTimeout(() => hud.hold(false)), true);
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-do]');
   if (el && handlers[el.dataset.do]) handlers[el.dataset.do](el.dataset);
 });
 document.addEventListener('input', e => {
   const t = e.target, b = t.dataset;
-  if (b.bind === 'bid') app.bid = +t.value;
+  if (t.id === 'name') app.myName = t.value; // kept as typed, sent on change
+  else if (t.id === 'code') app.code = t.value;
+  else if (b.bind === 'bid') app.bid = +t.value;
   else if (b.bind === 'giveCash' || b.bind === 'getCash') app.trade[b.bind] = Math.max(0, +t.value);
   else if (b.set && app.draft) app.draft[b.set] = t.type === 'checkbox' ? t.checked : t.type === 'number' ? +t.value : t.value;
 });
@@ -235,14 +271,17 @@ document.addEventListener('change', e => {
     app.trade[b.tradeSq] = t.checked ? [...list, sq] : list.filter(x => x !== sq);
     hud.render(app);
   } else if (b.set && app.draft) {
-    app.draft[b.set] = t.type === 'checkbox' ? t.checked : t.type === 'number' ? +t.value : t.value;
+    let v = t.type === 'number' ? +t.value : t.value;
+    if (hud.LIMITS[b.set]) { const [lo, hi] = hud.LIMITS[b.set]; v = Math.max(lo, Math.min(hi, v || lo)); }
+    app.draft[b.set] = v;
     handlers.settings();
-    if (b.set === 'end') hud.render(app);
+    hud.render(app);
   } else if (t.id === 'name') saveName();
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && app.modal) handlers.closeModal();
   if (e.key !== 'Enter') return;
+  if (e.target.dataset.set) e.target.blur(); // a setting typed in: sent by its change
   if (e.target.id === 'name') saveName();
   if (e.target.id === 'code') handlers.join();
   if (e.target.id === 'bid') handlers.bid();
