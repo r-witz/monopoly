@@ -827,7 +827,7 @@ export class Scene {
       }
       const n = d.buildings.length;
       d.buildings.forEach((b, i) => {
-        b.position.set(n === 1 ? 0 : -0.3 + i * 0.3, TOP, -t.d / 2 + 0.2);
+        b.position.set((i - (n - 1) / 2) * 0.23, TOP, -t.d / 2 + 0.2);
         t.g.add(b);
         if (animate && grow && i === n - 1) {
           jobs.push(this.tween(0.6, k => { b.scale.setScalar(Math.max(0.001, back(k))); b.position.y = TOP + (1 - ease(k)) * 1.2; }));
