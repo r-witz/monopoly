@@ -302,7 +302,7 @@ function deed(app) {
   if (s.kind === 'street') {
     rows = [['Loyer', s.rent[0]], ['Groupe complet', s.rent[0] * 2], ['🏠', s.rent[1]], ['🏠🏠', s.rent[2]], ['🏠🏠🏠', s.rent[3]], ['🏢 Tour', s.rent[4]]]
       .map(([l, v], i) => `<tr class="${d && (i === 0 ? d.level === 0 : i >= 2 && d.level === i - 1) ? 'cur' : ''}"><td>${l}</td><td>${fmt(v)}</td></tr>`).join('') +
-      `<tr class="sub"><td>Construction</td><td>${s.buildCost}</td></tr>`;
+      `<tr class="sub"><td>Maison</td><td>${fmt(s.buildCost)}</td></tr><tr class="sub"><td>Tour</td><td>${fmt(s.towerCost)}</td></tr>`;
   } else if (s.kind === 'transit') {
     rows = b.transitRent.map((v, i) => `<tr><td>${i + 1} ligne${i ? 's' : ''}</td><td>${v}</td></tr>`).join('');
   } else if (s.kind === 'utility') {

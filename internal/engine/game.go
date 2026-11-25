@@ -377,7 +377,7 @@ func (g *Game) Worth(p int) int {
 			continue
 		}
 		s := &g.Board.Squares[sq]
-		w += s.Price + d.Level*s.BuildCost
+		w += s.Price + g.Board.builtCost(sq, d.Level)
 		if d.Mortgaged {
 			w -= g.Board.mortgage(sq)
 		}

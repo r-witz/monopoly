@@ -195,7 +195,7 @@ function squareDetail() {
   const s = board.squares[selected], d = deed(selected);
   let info = '';
   if (s.kind === 'street') info = `Loyer : ${s.rent[0]} (groupe complet : ${2 * s.rent[0]}), puis ${s.rent.slice(1).join(' / ')} (la dernière : tour).
-    Construction : ${s.buildCost}.`;
+    Construction : ${s.buildCost} la maison, ${s.towerCost} la tour.`;
   if (s.kind === 'transit') info = 'Loyer selon les lignes possédées : ' + board.transitRent.join(' / ') + '.';
   if (s.kind === 'utility') info = 'Loyer : dés × ' + board.utilityFactor.join(' (ou ×') + ' avec les deux).';
   if (s.kind === 'tax') info = 'À payer : ' + s.tax + '.';

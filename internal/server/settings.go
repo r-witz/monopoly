@@ -27,7 +27,7 @@ type settings struct {
 
 // defaults are the settings of a room whose creator did not say.
 func defaults() settings {
-	return settings{Max: 6, StartCash: 1500, Salary: 200, End: "rounds", Rounds: 25, Minutes: 45,
+	return settings{Max: 6, StartCash: 2000, Salary: 200, End: "rounds", Rounds: 25, Minutes: 45,
 		TurnSeconds: 30, AuctionSeconds: 10, WinTransit: true, WinGroups: true}
 }
 

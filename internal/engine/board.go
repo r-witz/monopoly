@@ -24,7 +24,8 @@ type Square struct {
 	Group     int    `json:"group,omitempty"`     // streets: 1 to 8, the set to own whole to build
 	Price     int    `json:"price,omitempty"`     // streets, transit, utilities
 	Rent      []int  `json:"rent,omitempty"`      // streets: by level, 0 (bare) to MaxLevel
-	BuildCost int    `json:"buildCost,omitempty"` // streets: one level; sold back for half
+	BuildCost int    `json:"buildCost,omitempty"` // streets: one house; sold back for half
+	TowerCost int    `json:"towerCost,omitempty"` // streets: the tower, on top of the houses; sold back for half
 	Tax       int    `json:"tax,omitempty"`
 }
 
@@ -78,66 +79,88 @@ func (b *Board) unmortgage(sq int) int {
 	return m + (m*b.MortgageRate+99)/100
 }
 
-// street builds a street of a group, its rents by level (bare, 1 to 3 houses, the tower) and the
-// cost of one level.
+// levelCost is what building level (1 to MaxLevel) of street sq costs: a house, or the tower.
+func (b *Board) levelCost(sq, level int) int {
+	if level == b.MaxLevel {
+		return b.Squares[sq].TowerCost
+	}
+	return b.Squares[sq].BuildCost
+}
+
+// builtCost is what the levels 1 to level of street sq cost together.
+func (b *Board) builtCost(sq, level int) int {
+	c := 0
+	for l := 1; l <= level; l++ {
+		c += b.levelCost(sq, l)
+	}
+	return c
+}
+
+// street builds a street of a group: its price, the cost of a house and of the tower, and its
+// rents by level (bare, 1 to 3 houses, the tower).
 //
-// The rents are those of Business Tour, in thousands, from a player's notes (its rent of every
-// city at every level): our group n takes the cities of its group n in order. A group of 3 for our
-// 2 streets drops its middle city; a group of 2 for our 3 streets gives its cheaper city to two
-// streets. Its bare rents are then those of the classic game, so prices and build costs stay the
-// classic ones.
-func street(name string, group, price, build int, rent ...int) Square {
-	return Square{Kind: KindStreet, Name: name, Group: group, Price: price, Rent: rent, BuildCost: build}
+// All of it is Business Tour's, in thousands (a game starts with 2 000, its 2 million). The rents
+// come from a player's notes (its rent of every city at every level): our group n takes the cities
+// of its group n in order. A group of 3 for our 2 streets drops its middle city; a group of 2 for
+// our 3 streets gives its cheaper city to two streets. Its bare rents are then those of the classic
+// game, and so are its prices and house costs: Grenade 60 and 50, Pékin 100 and 50, Londres 220 and
+// 150, Tokyo 400 and 200. Its hotel, our tower, costs more than a house: 150 for Grenade and Pékin
+// (3 houses), 375 for Londres and 500 for Tokyo (2.5 houses). Groups 3 and 4 (houses at 100) are
+// not in those 4 cities: their tower at 250 (2.5 houses) is our guess, as are 375 for group 6 and
+// 500 for group 7, like the other groups of their house cost.
+func street(name string, group, price, build, tower int, rent ...int) Square {
+	return Square{Kind: KindStreet, Name: name, Group: group, Price: price, Rent: rent, BuildCost: build, TowerCost: tower}
 }
 
 // Classic is the board of Quartiers: 40 squares, a fictional harbour town. Four corners and four
-// sides of 9 squares; the streets of a group are all on the same side. Street rents are those of
-// Business Tour; prices, build costs, transit, utilities, taxes and fines those of the classic game.
+// sides of 9 squares; the streets of a group are all on the same side. Streets are those of
+// Business Tour (prices, houses, tower, rents); transit, utilities, taxes and fines those of the
+// classic game.
 var Classic = &Board{
 	Squares: []Square{
 		{Kind: KindStart, Name: "Départ"},
-		street("Ruelle des Tanneurs", 1, 60, 50, 2, 25, 50, 75, 150),
+		street("Ruelle des Tanneurs", 1, 60, 50, 150, 2, 25, 50, 75, 150),
 		{Kind: KindCard, Name: "Rumeur"},
-		street("Impasse du Lavoir", 1, 60, 50, 4, 30, 60, 90, 180),
+		street("Impasse du Lavoir", 1, 60, 50, 150, 4, 30, 60, 90, 180),
 		{Kind: KindTax, Name: "Taxe foncière", Tax: 200},
 		{Kind: KindTransit, Name: "Ligne Nord", Price: 200},
-		street("Rue des Ateliers", 2, 100, 50, 6, 33, 65, 98, 195),
+		street("Rue des Ateliers", 2, 100, 50, 150, 6, 33, 65, 98, 195),
 		{Kind: KindCard, Name: "Rumeur"},
-		street("Rue du Marché", 2, 100, 50, 6, 35, 75, 105, 210),
-		street("Place des Halles", 2, 120, 50, 8, 38, 75, 113, 225),
+		street("Rue du Marché", 2, 100, 50, 150, 6, 35, 75, 105, 210),
+		street("Place des Halles", 2, 120, 50, 150, 8, 38, 75, 113, 225),
 
 		{Kind: KindJail, Name: "Poste de police"},
-		street("Quai des Pêcheurs", 3, 140, 100, 10, 70, 140, 210, 385),
+		street("Quai des Pêcheurs", 3, 140, 100, 250, 10, 70, 140, 210, 385),
 		{Kind: KindUtility, Name: "Compagnie des eaux", Price: 150},
-		street("Rue du Port", 3, 140, 100, 10, 75, 150, 225, 413),
-		street("Avenue du Phare", 3, 160, 100, 12, 80, 160, 240, 440),
+		street("Rue du Port", 3, 140, 100, 250, 10, 75, 150, 225, 413),
+		street("Avenue du Phare", 3, 160, 100, 250, 12, 80, 160, 240, 440),
 		{Kind: KindTransit, Name: "Ligne Est", Price: 200},
-		street("Rue des Remparts", 4, 180, 100, 14, 85, 170, 255, 468),
+		street("Rue des Remparts", 4, 180, 100, 250, 14, 85, 170, 255, 468),
 		{Kind: KindCard, Name: "Rumeur"},
-		street("Porte Saint-Clair", 4, 180, 100, 14, 85, 170, 255, 468),
-		street("Montée du Château", 4, 200, 100, 16, 90, 180, 270, 495),
+		street("Porte Saint-Clair", 4, 180, 100, 250, 14, 85, 170, 255, 468),
+		street("Montée du Château", 4, 200, 100, 250, 16, 90, 180, 270, 495),
 
 		{Kind: KindRest, Name: "Jardin public"},
-		street("Boulevard des Arts", 5, 220, 150, 18, 113, 225, 338, 619),
+		street("Boulevard des Arts", 5, 220, 150, 375, 18, 113, 225, 338, 619),
 		{Kind: KindCard, Name: "Rumeur"},
-		street("Rue du Théâtre", 5, 220, 150, 18, 113, 225, 338, 619),
-		street("Place de l'Opéra", 5, 240, 150, 20, 120, 240, 360, 660),
+		street("Rue du Théâtre", 5, 220, 150, 375, 18, 113, 225, 338, 619),
+		street("Place de l'Opéra", 5, 240, 150, 375, 20, 120, 240, 360, 660),
 		{Kind: KindTransit, Name: "Ligne Sud", Price: 200},
-		street("Rue de la Bibliothèque", 6, 260, 150, 22, 128, 255, 383, 701),
-		street("Place de l'Université", 6, 260, 150, 22, 135, 270, 405, 743),
+		street("Rue de la Bibliothèque", 6, 260, 150, 375, 22, 128, 255, 383, 701),
+		street("Place de l'Université", 6, 260, 150, 375, 22, 135, 270, 405, 743),
 		{Kind: KindUtility, Name: "Centrale électrique", Price: 150},
-		street("Avenue des Sciences", 6, 280, 150, 24, 143, 285, 428, 784),
+		street("Avenue des Sciences", 6, 280, 150, 375, 24, 143, 285, 428, 784),
 
 		{Kind: KindGoToJail, Name: "Au poste !"},
-		street("Cours des Tilleuls", 7, 300, 200, 26, 170, 340, 510, 935),
-		street("Avenue des Platanes", 7, 300, 200, 26, 170, 340, 510, 935),
+		street("Cours des Tilleuls", 7, 300, 200, 500, 26, 170, 340, 510, 935),
+		street("Avenue des Platanes", 7, 300, 200, 500, 26, 170, 340, 510, 935),
 		{Kind: KindCard, Name: "Rumeur"},
-		street("Allée des Cèdres", 7, 320, 200, 28, 180, 360, 540, 990),
+		street("Allée des Cèdres", 7, 320, 200, 500, 28, 180, 360, 540, 990),
 		{Kind: KindTransit, Name: "Ligne Ouest", Price: 200},
 		{Kind: KindCard, Name: "Rumeur"},
-		street("Esplanade du Belvédère", 8, 350, 200, 35, 190, 380, 570, 1045),
+		street("Esplanade du Belvédère", 8, 350, 200, 500, 35, 190, 380, 570, 1045),
 		{Kind: KindTax, Name: "Contravention", Tax: 100},
-		street("Colline des Ambassades", 8, 400, 200, 50, 200, 400, 600, 1100),
+		street("Colline des Ambassades", 8, 400, 200, 500, 50, 200, 400, 600, 1100),
 	},
 	Cards: []Card{
 		{Text: "Votre start-up lève des fonds : recevez 150.", Effect: Collect, Amount: 150},
