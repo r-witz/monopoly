@@ -175,7 +175,9 @@ async function play({ m, at }) {
   app.game = m.state;
   app.deadlineAt = m.deadline ? at + m.deadline : 0;
   app.endsAt = m.endsIn ? at + m.endsIn : 0;
-  if (m.state.auction && app.bid <= m.state.auction.high) app.bid = m.state.auction.high + 10;
+  const a = m.state.auction;
+  if (a && app.bid <= a.high) app.bid = a.high + 10;
+  if (a && app.bid < a.min) app.bid = a.min;
   if (m.state.phase === 'over' && m.events.some(e => e.kind === 'over')) app.modal = hud.overModal;
   document.body.classList.remove('waiting');
   hud.render(app);
@@ -226,7 +228,7 @@ const handlers = {
   kick: d => send({ t: 'kick', id: +d.id }),
   act: d => act(d.a, { square: d.sq ? +d.sq : 0, trade: d.trade ? +d.trade : 0 }),
   bid: () => act('bid', { amount: app.bid }),
-  bidQuick(d) { app.bid = (app.game.auction?.high || 0) + +d.n; act('bid', { amount: app.bid }); },
+  bidQuick(d) { const a = app.game.auction; app.bid = (a.high || a.min) + +d.n; act('bid', { amount: app.bid }); },
   unselect() { app.selected = -1; scene.select(-1); hud.render(app); },
   pick: d => scene.onPick(+d.sq),
   toggleLog() { app.logOpen = !app.logOpen; hud.renderLog(app); },
