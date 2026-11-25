@@ -54,12 +54,13 @@ func (g *Game) build(p, sq int) error {
 	if lo, _, mortgaged := g.levels(s.Group); mortgaged || d.Level > lo || d.Level == g.Board.MaxLevel {
 		return ErrInvalid
 	}
-	if g.Players[p].Cash < s.BuildCost {
+	cost := g.Board.levelCost(sq, d.Level+1)
+	if g.Players[p].Cash < cost {
 		return ErrCash
 	}
-	g.transfer(p, -1, s.BuildCost)
+	g.transfer(p, -1, cost)
 	d.Level++
-	g.emit(Event{Kind: "built", Who: g.id(p), Square: sq, Level: d.Level, Amount: s.BuildCost})
+	g.emit(Event{Kind: "built", Who: g.id(p), Square: sq, Level: d.Level, Amount: cost})
 	return nil
 }
 
@@ -76,10 +77,11 @@ func (g *Game) sell(p, sq int) error {
 }
 
 func (g *Game) sellLevel(p, sq int) {
-	s, d := &g.Board.Squares[sq], &g.Deeds[sq]
-	g.transfer(-1, p, s.BuildCost/2)
+	d := &g.Deeds[sq]
+	back := g.Board.levelCost(sq, d.Level) / 2
+	g.transfer(-1, p, back)
 	d.Level--
-	g.emit(Event{Kind: "sold", Who: g.id(p), Square: sq, Level: d.Level, Amount: s.BuildCost / 2})
+	g.emit(Event{Kind: "sold", Who: g.id(p), Square: sq, Level: d.Level, Amount: back})
 }
 
 // mortgageable says whether sq, owned, can be mortgaged: not already, and no building in its group.
@@ -175,7 +177,9 @@ func (g *Game) bankrupt(p, to int) {
 	pl := g.Players[p]
 	for sq, d := range g.Deeds {
 		if d.Owner == p && d.Level > 0 {
-			g.transfer(-1, p, d.Level*g.Board.Squares[sq].BuildCost/2)
+			for l := d.Level; l > 0; l-- {
+				g.transfer(-1, p, g.Board.levelCost(sq, l)/2)
+			}
 			g.Deeds[sq].Level = 0
 		}
 	}

@@ -322,8 +322,8 @@ func TestBoardLayout(t *testing.T) {
 		if s.Kind != KindStreet {
 			continue
 		}
-		if len(s.Rent) != b.MaxLevel+1 || s.BuildCost <= 0 {
-			t.Fatalf("%s: %d rents (want %d), build cost %d", s.Name, len(s.Rent), b.MaxLevel+1, s.BuildCost)
+		if len(s.Rent) != b.MaxLevel+1 || s.BuildCost <= 0 || s.TowerCost < s.BuildCost {
+			t.Fatalf("%s: %d rents (want %d), house %d, tower %d", s.Name, len(s.Rent), b.MaxLevel+1, s.BuildCost, s.TowerCost)
 		}
 		if side, ok := sides[s.Group]; ok && side != i/10 {
 			t.Fatalf("group %d on sides %d and %d", s.Group, side, i/10)

@@ -101,9 +101,10 @@ arrête et exclut, anti-flood, écriture non bloquante. Le protocole est décrit
 - **Case libre** : on l'achète, ou une enchère s'ouvre pour tous. Elle se ferme quand tout le
   monde a passé, ou après N secondes sans nouvelle offre.
 - **Loyers** : doublés sur un groupe complet sans construction. Ensuite 3 maisons puis
-  une tour, construites uniformément. Les loyers des rues reprennent ceux de Business Tour (relevés
-  par un joueur, en milliers) ; prix, constructions, lignes, compagnies, taxes et amende ceux du
-  jeu classique.
+  une tour, construites uniformément. Les rues reprennent Business Tour, en milliers (on démarre avec
+  2 000, ses 2 millions) : prix, maisons, et une tour plus chère qu'une maison (150 à 500, comme
+  son hôtel). Les loyers viennent des relevés d'un joueur. Lignes, compagnies, taxes et amende
+  restent celles du jeu classique.
 - **Dette** : on vend, on hypothèque ou on échange pour payer, sinon c'est la faillite. Tout part
   alors au créancier, ou retourne à la banque.
 - **Échanges** : propriétés et argent dans les deux sens, à tout moment. On ne peut pas en
