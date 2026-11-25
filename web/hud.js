@@ -267,10 +267,12 @@ function actions(app) {
     } break;
     case 'auction': {
       const a = g.auction;
-      const head = `🔨 <b>${esc(b.squares[a.square].name)}</b> · ${a.high ? money(a.high) + ' par ' + esc(nm(a.bidder)) : 'aucune offre'}`;
+      const head = `🔨 <b>${esc(b.squares[a.square].name)}</b> · ${a.high ? money(a.high) + ' par ' + esc(nm(a.bidder)) : 'mise à prix ' + money(a.min)}`;
       if (a.passed.includes(app.me)) return box(head, '<span class="muted">Tu as passé.</span>');
       if (a.bidder === app.me) return box(head, '<span class="lead">Tu mènes !</span>');
-      const quick = [10, 50, 100].map(n => `<button class="btn" data-do="bidQuick" data-n="${n}">+${n}</button>`).join('');
+      // With no bid yet, the quick bids start from the minimum: half the price.
+      const quick = (a.high ? [10, 50, 100] : [0, 50, 100]).map(n =>
+        `<button class="btn" data-do="bidQuick" data-n="${n}">${a.high ? '+' + n : fmt(a.min + n)}</button>`).join('');
       return box(head, `${quick}<input id="bid" class="field" type="number" data-bind="bid" value="${app.bid}">
         <button class="btn big main" data-do="bid">Enchérir</button>${btn('pass', 'Passer')}`);
     }

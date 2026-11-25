@@ -156,7 +156,7 @@ func (g *Game) seat(id uint32) int {
 //	roll                     the current player, PhaseRoll
 //	payjail, jailcard        leave the police station before rolling: pay the fine, or use a card
 //	buy, decline             PhaseBuy: the square the current player is on; decline starts an auction
-//	bid (amount), pass       PhaseAuction: any player still in it; a bid beats the highest, within
+//	bid (amount), pass       PhaseAuction: any player still in it; a bid beats the highest, is at least half the price, within
 //	                         the bidder's cash; who passed is out of this auction
 //	build, sell (square)     one level, at any time, evenly across the group (the whole group owned,
 //	                         none of it mortgaged); not while an auction runs or the builder owes

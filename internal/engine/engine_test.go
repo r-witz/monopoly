@@ -283,14 +283,20 @@ func TestAuction(t *testing.T) {
 	script(g, [2]int{1, 2})
 	must(t, g, 0, Action{Kind: "roll"}) // square 3, a street
 	must(t, g, 0, Action{Kind: "decline"})
-	must(t, g, 1, Action{Kind: "bid", Amount: 40})
+	if _, err := g.Apply(1, Action{Kind: "bid", Amount: 44}); err == nil {
+		t.Fatal("bid under half the price (90)")
+	}
+	if v := g.View(); v.Auction.Min != 45 {
+		t.Fatalf("min bid %d, want 45", v.Auction.Min)
+	}
+	must(t, g, 1, Action{Kind: "bid", Amount: 45})
 	if _, err := g.Apply(1, Action{Kind: "build", Square: 3}); err == nil {
 		t.Fatal("built during an auction")
 	}
-	must(t, g, 2, Action{Kind: "bid", Amount: 41})
+	must(t, g, 2, Action{Kind: "bid", Amount: 46})
 	must(t, g, 0, Action{Kind: "pass"})
 	ev := must(t, g, 1, Action{Kind: "pass"})
-	if !has(ev, "auctioned") || g.Deeds[3].Owner != 2 || g.Players[2].Cash != 1500-41 || g.Phase != PhaseEnd {
+	if !has(ev, "auctioned") || g.Deeds[3].Owner != 2 || g.Players[2].Cash != 1500-46 || g.Phase != PhaseEnd {
 		t.Fatalf("owner %d cash %d phase %s", g.Deeds[3].Owner, g.Players[2].Cash, g.Phase)
 	}
 }

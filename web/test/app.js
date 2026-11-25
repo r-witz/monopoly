@@ -47,6 +47,7 @@ function receive(m) {
       endsAt = m.endsIn ? Date.now() + m.endsIn : 0;
       for (const e of m.events) log.unshift(describe(e));
       if (game.auction && bid <= game.auction.high) bid = game.auction.high + 10;
+      if (game.auction && bid < game.auction.min) bid = game.auction.min;
       break;
     case 'stopped': game = null; log.unshift('La partie a été arrêtée.'); break;
     case 'left':
@@ -222,7 +223,7 @@ function actions() {
     }
     case 'auction': {
       const a = game.auction;
-      const head = `Enchère sur <b>${esc(sqName(a.square))}</b> : ${a.high ? a.high + ' par ' + esc(nm(a.bidder)) : 'aucune offre'}<br>`;
+      const head = `Enchère sur <b>${esc(sqName(a.square))}</b> : ${a.high ? a.high + ' par ' + esc(nm(a.bidder)) : 'mise à prix ' + a.min}<br>`;
       if (a.passed.includes(me)) return head + '<span class="muted">Tu as passé.</span>';
       if (a.bidder === me) return head + '<span class="muted">Tu mènes.</span>';
       return head + `<input type="number" id="bid" data-bind="bid" value="${bid}">` +

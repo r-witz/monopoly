@@ -40,12 +40,15 @@ func (g *Game) decline(p int) error {
 	return nil
 }
 
+// minBid is the lowest bid an auction on sq takes: half the price of the square.
+func (g *Game) minBid(sq int) int { return (g.Board.Squares[sq].Price + 1) / 2 }
+
 func (g *Game) bid(p, amount int) error {
 	a := g.Auction
 	switch {
 	case g.Phase != PhaseAuction:
 		return ErrPhase
-	case a.Passed[p] || a.Bidder == p || amount <= a.High:
+	case a.Passed[p] || a.Bidder == p || amount <= a.High || amount < g.minBid(a.Square):
 		return ErrInvalid
 	case amount > g.Players[p].Cash:
 		return ErrCash

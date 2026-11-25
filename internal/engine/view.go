@@ -75,6 +75,7 @@ type DeedView struct {
 
 type AuctionView struct {
 	Square int      `json:"square"`
+	Min    int      `json:"min"` // the lowest bid: half the price
 	High   int      `json:"high"`
 	Bidder uint32   `json:"bidder"` // 0: no bid yet
 	Passed []uint32 `json:"passed"` // out of it
@@ -104,7 +105,7 @@ func (g *Game) View() View {
 		}
 	}
 	if a := g.Auction; a != nil {
-		av := &AuctionView{Square: a.Square, High: a.High, Bidder: g.id(a.Bidder), Passed: []uint32{}}
+		av := &AuctionView{Square: a.Square, Min: g.minBid(a.Square), High: a.High, Bidder: g.id(a.Bidder), Passed: []uint32{}}
 		for i, passed := range a.Passed {
 			if passed {
 				av.Passed = append(av.Passed, g.id(i))
