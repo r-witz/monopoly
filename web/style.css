@@ -258,6 +258,22 @@ body.animating #actions .btn[data-do=act], body.waiting #actions .btn[data-do=ac
   padding: 3px 8px; margin: 3px 0; cursor: pointer; background: #fff; font-size: 14px; }
 .chip.on { background: #fff3b8; }
 .chip input { display: none; }
+.sale { width: min(520px, 100%); }
+.sale .owe { text-align: center; font-size: 16px; }
+.sale .hint { text-align: center; font-size: 13px; margin: 4px 0 10px; }
+.modalbox > .salelist { flex: 0 1 auto; min-height: 0; overflow: auto; padding-right: 4px; }
+.salerow { gap: 8px; padding: 6px 10px; font-size: 15px; }
+.salerow .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.salerow .lv { font-size: 13px; }
+.salerow .tick { flex: none; width: 20px; height: 20px; display: grid; place-items: center; border: 2px solid var(--ink); border-radius: 6px; background: #fff; font-style: normal; font-weight: 900; }
+.salerow.on .tick { background: var(--sun); }
+.salerow.off { cursor: default; opacity: .55; }
+.saletotal { margin-top: 12px; padding-top: 10px; border-top: var(--dash); display: grid; gap: 6px; }
+.saletotal .row { display: flex; align-items: center; font-size: 16px; }
+.gauge { height: 14px; border: var(--line); border-radius: 99px; background: #fff; overflow: hidden; }
+.gauge i { display: block; height: 100%; background: #ff8a8a; transition: width .2s; }
+.gauge.ok i { background: var(--mint); }
+.saletotal .status { font-size: 14px; }
 .cash { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13px; }
 .cash .field { width: 90px; }
 .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }

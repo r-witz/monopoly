@@ -44,11 +44,12 @@ const (
 
 // Action is a player's move. Which fields count depends on Kind.
 type Action struct {
-	Kind   string `json:"a"`      // see Apply
-	Square int    `json:"square"` // build, sell, mortgage, unmortgage
-	Level  int    `json:"level"`  // buy: the houses bought with the street; build: the level to build up to
-	Offer  *Offer `json:"offer"`  // offer
-	Trade  int    `json:"trade"`  // accept, reject, cancel: the trade's ID
+	Kind    string `json:"a"`       // see Apply
+	Square  int    `json:"square"`  // build, sell, mortgage, unmortgage
+	Squares []int  `json:"squares"` // resell
+	Level   int    `json:"level"`   // buy: the houses bought with the street; build: the level to build up to
+	Offer   *Offer `json:"offer"`   // offer
+	Trade   int    `json:"trade"`   // accept, reject, cancel: the trade's ID
 }
 
 // Errors of Apply. Nothing changed when one is returned.
@@ -180,6 +181,9 @@ func (g *Game) seat(id uint32) int {
 //	sell (square)            one level of a street, at any time
 //	mortgage, unmortgage     at any time, not while the player owes (unmortgage); a
 //	                         street only with no building on it
+//	resell (squares)         PhaseDebt, the player who owes: sell these properties back to the bank, with
+//	                         their buildings, at their resale value (see Resale); they are free again.
+//	                         Not a mortgaged one: its value was already lent
 //	pay, bankrupt            PhaseDebt: pay what is owed, or give up: everything goes to the creditor
 //	end                      PhaseEnd: the next player's turn. Unasked, once the current player has
 //	                         nothing left to build (see canBuild): managing and trading go on in any turn
@@ -215,6 +219,8 @@ func (g *Game) Apply(p int, a Action) ([]Event, error) {
 		err = g.mortgage(p, a.Square)
 	case "unmortgage":
 		err = g.unmortgage(p, a.Square)
+	case "resell":
+		err = g.resell(p, a.Squares)
 	case "pay":
 		err = g.payDebt(p)
 	case "bankrupt":

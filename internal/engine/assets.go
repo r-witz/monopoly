@@ -83,6 +83,41 @@ func (g *Game) sellLevel(p, sq int) {
 	g.emit(Event{Kind: "sold", Who: g.id(p), Square: sq, Level: d.Level, Amount: back})
 }
 
+// Resale is what selling square sq back to the bank brings, with its buildings: half its price,
+// and half of what each level cost, as when selling them one by one.
+func (g *Game) Resale(sq int) int {
+	v := g.Board.Squares[sq].Price / 2
+	for l := g.Deeds[sq].Level; l > 0; l-- {
+		v += g.Board.levelCost(sq, l) / 2
+	}
+	return v
+}
+
+// resell sells the squares of p, who owes money, back to the bank: see Apply.
+func (g *Game) resell(p int, squares []int) error {
+	if g.Phase != PhaseDebt {
+		return ErrPhase
+	}
+	if p != g.Turn {
+		return ErrNotYours
+	}
+	if len(squares) == 0 || len(squares) > len(g.Deeds) || len(slices.Compact(slices.Sorted(slices.Values(squares)))) != len(squares) {
+		return ErrInvalid
+	}
+	for _, sq := range squares {
+		if g.ownedBy(p, sq) != nil || g.Deeds[sq].Mortgaged {
+			return ErrInvalid
+		}
+	}
+	for _, sq := range squares {
+		v := g.Resale(sq)
+		g.transfer(-1, p, v)
+		g.Deeds[sq] = Deed{Owner: -1}
+		g.emit(Event{Kind: "resold", Who: g.id(p), Square: sq, Amount: v})
+	}
+	return nil
+}
+
 // mortgageable says whether sq, owned, can be mortgaged: not already, and no building on it.
 func (g *Game) mortgageable(sq int) bool {
 	d := g.Deeds[sq]

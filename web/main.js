@@ -9,6 +9,7 @@ const app = {
   me: 0, board: null, colors: [], room: null, game: null, seq: 0, deadlineAt: 0, endsAt: 0, selected: -1,
   log: [], logOpen: false, rooms: null, draft: null, modal: null, dismissed: 0,
   trade: { to: 0, give: [], get: [], giveCash: 0, getCash: 0 },
+  sale: [], // the squares picked to sell back to the bank, to pay a debt
   myName: sessionStorage.name || '', myColor: sessionStorage.color != null ? +sessionStorage.color : -1,
 };
 let ws, scene = null;
@@ -180,6 +181,13 @@ async function play({ m, at }) {
   app.deadlineAt = m.deadline ? at + m.deadline : 0;
   app.endsAt = m.endsIn ? at + m.endsIn : 0;
   if (m.state.phase === 'over' && m.events.some(e => e.kind === 'over')) app.modal = hud.overModal;
+  // short of cash to pay: what can be sold opens at once, and closes once the debt is gone
+  const owing = m.state.phase === 'debt' && m.state.debt?.who === app.me;
+  if (owing && m.events.some(e => e.kind === 'debt' && e.who === app.me)) {
+    app.sale = [];
+    app.modal = hud.saleModal;
+  }
+  if (app.modal === hud.saleModal && !owing) app.modal = null;
   document.body.classList.remove('waiting');
   hud.render(app);
   await scene.sync(m.state, colorOf, !scene.fast);
@@ -239,6 +247,17 @@ const handlers = {
     app.modal = null;
     hud.render(app);
   },
+  openSale() { app.sale = []; app.modal = hud.saleModal; hud.render(app); },
+  sell() {
+    const g = app.game, me = g.players.find(p => p.id === app.me);
+    const picked = g.deeds.filter(d => d.owner === app.me && !d.mortgaged && app.sale.includes(d.square));
+    if (!picked.length || !g.debt) return;
+    act('resell', { squares: picked.map(d => d.square) });
+    if (me.cash + picked.reduce((n, d) => n + d.resale, 0) >= g.debt.amount) act('pay');
+    app.sale = [];
+    app.modal = null;
+    hud.render(app);
+  },
   closeModal() { app.modal = null; hud.render(app); },
   lobby() { app.dismissed = app.seq; leaveGame(); hud.render(app); },
   ranking() { app.modal = hud.overModal; hud.render(app); },
@@ -266,7 +285,11 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   const t = e.target, b = t.dataset;
-  if (b.tradeSq) {
+  if ('saleSq' in b) {
+    const sq = +t.value;
+    app.sale = t.checked ? [...app.sale, sq] : app.sale.filter(x => x !== sq);
+    hud.render(app);
+  } else if (b.tradeSq) {
     const sq = +t.value, list = app.trade[b.tradeSq];
     app.trade[b.tradeSq] = t.checked ? [...list, sq] : list.filter(x => x !== sq);
     hud.render(app);

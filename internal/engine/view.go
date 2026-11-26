@@ -19,6 +19,7 @@ package engine
 //	declined     who, square: not bought, it stays free
 //	bonus        who, square, by: landed right on the start, won BonusRoll or BonusBuild
 //	built, sold  who, square, level (now), amount (paid, or got back)
+//	resold       who, square, amount: sold back to the bank with its buildings, free again
 //	mortgaged, unmortgaged   who, square, amount (got, or paid)
 //	offer, traded, rejected, cancelled   who, to, trade: a trade proposed by who, accepted by who,
 //	             rejected by who, withdrawn by who
@@ -74,6 +75,7 @@ type DeedView struct {
 	Owner     uint32 `json:"owner"`
 	Level     int    `json:"level"`
 	Mortgaged bool   `json:"mortgaged"`
+	Resale    int    `json:"resale"` // what selling it back to the bank would bring, with its buildings
 }
 
 type DebtView struct {
@@ -99,7 +101,7 @@ func (g *Game) View() View {
 	}
 	for sq, d := range g.Deeds {
 		if d.Owner >= 0 {
-			v.Deeds = append(v.Deeds, DeedView{sq, g.id(d.Owner), d.Level, d.Mortgaged})
+			v.Deeds = append(v.Deeds, DeedView{sq, g.id(d.Owner), d.Level, d.Mortgaged, g.Resale(sq)})
 		}
 	}
 	if d := g.Debt; d != nil {

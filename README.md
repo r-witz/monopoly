@@ -115,7 +115,9 @@ arrête et exclut, anti-flood, écriture non bloquante. Le protocole est décrit
   donne à la main que s'il peut encore construire (sur sa rue, ou au Départ pile) : hypothéquer,
   vendre et échanger se font de toute façon à tout moment.
 - **Dette** : on vend, on hypothèque ou on échange pour payer, sinon c'est la faillite. Tout part
-  alors au créancier, ou retourne à la banque.
+  alors au créancier, ou retourne à la banque. Une fenêtre s'ouvre pour revendre à la banque les
+  propriétés de son choix, avec leurs constructions : la moitié du prix et la moitié de ce que les
+  constructions ont coûté. La propriété redevient libre (une hypothéquée ne se revend pas).
 - **Échanges** : propriétés et argent dans les deux sens, à tout moment. Une offre est revérifiée
   à l'acceptation, et un nouvel envoi remplace l'offre précédente du même joueur.
 - **Minuteur** : si le joueur ne décide pas à temps, le serveur joue à sa place. Il lance les dés,

@@ -98,7 +98,7 @@ func invariants(t *testing.T, g *Game) {
 // randomAction is any action, legal or not, by any seat, with random arguments.
 func randomAction(g *Game, r *rand.Rand) (int, Action) {
 	kinds := []string{"roll", "roll", "roll", "buy", "buy", "decline", "build", "build", "sell",
-		"mortgage", "unmortgage", "pay", "pay", "bankrupt", "end", "end", "end", "offer", "accept", "reject", "cancel", "payjail", "jailcard", "bogus"}
+		"mortgage", "unmortgage", "pay", "pay", "bankrupt", "end", "end", "end", "offer", "accept", "reject", "cancel", "payjail", "jailcard", "resell", "resell", "bogus"}
 	p := r.IntN(len(g.Players))
 	if r.IntN(2) == 0 {
 		p = g.Turn
@@ -108,6 +108,13 @@ func randomAction(g *Game, r *rand.Rand) (int, Action) {
 		a.Square = g.here // most random squares are not where the player stands
 		if g.anywhere {
 			a.Square = r.IntN(len(g.Deeds))
+		}
+	}
+	if a.Kind == "resell" {
+		for sq, d := range g.Deeds {
+			if d.Owner == p && r.IntN(3) == 0 || r.IntN(40) == 0 {
+				a.Squares = append(a.Squares, sq)
+			}
 		}
 	}
 	if len(g.Trades) > 0 {
@@ -681,5 +688,42 @@ func TestTurnPassesWhenDone(t *testing.T) {
 	if g.Turn != 2 {
 		t.Fatalf("turn %d after end", g.Turn)
 	}
+	invariants(t, g)
+}
+
+// In debt, properties go back to the bank with their buildings, at half their cost, free again;
+// then the debt can be paid.
+func TestResell(t *testing.T) {
+	g := newGame(2, testRules, 1)
+	give(g, 0, 1, 3, 5)
+	g.Deeds[1].Level = 2
+	g.Deeds[5].Mortgaged = true
+	g.transfer(0, -1, 1500)
+	if _, err := g.Apply(0, Action{Kind: "resell", Squares: []int{1}}); err != ErrPhase {
+		t.Fatalf("resold out of debt: %v", err)
+	}
+	g.charge(0, 100, 1, g.settle)
+	for _, sq := range [][]int{{}, {5}, {1, 1}, {7}, {1, 5}} { // nothing, mortgaged, twice, not theirs
+		if _, err := g.Apply(0, Action{Kind: "resell", Squares: sq}); err != ErrInvalid {
+			t.Fatalf("resold %v: %v", sq, err)
+		}
+	}
+	if _, err := g.Apply(1, Action{Kind: "resell", Squares: []int{1}}); err != ErrNotYours {
+		t.Fatalf("resold by the creditor: %v", err)
+	}
+	s1, s3 := &g.Board.Squares[1], &g.Board.Squares[3]
+	want := s1.Price/2 + s1.BuildCost + s3.Price/2 // 2 houses at half their cost
+	if v := g.View().Deeds[0]; v.Square != 1 || v.Resale != s1.Price/2+s1.BuildCost {
+		t.Fatalf("view %+v", v)
+	}
+	ev := must(t, g, 0, Action{Kind: "resell", Squares: []int{1, 3}})
+	if n := len(slices.DeleteFunc(ev, func(e Event) bool { return e.Kind != "resold" })); n != 2 || g.Players[0].Cash != want {
+		t.Fatalf("%d resold, cash %d, want %d", n, g.Players[0].Cash, want)
+	}
+	if d := g.Deeds[1]; d.Owner != -1 || d.Level != 0 || g.Deeds[3].Owner != -1 || g.Phase != PhaseDebt {
+		t.Fatalf("deed %+v, phase %s", d, g.Phase)
+	}
+	invariants(t, g)
+	must(t, g, 0, Action{Kind: "pay"})
 	invariants(t, g)
 }

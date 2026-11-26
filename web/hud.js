@@ -34,6 +34,7 @@ export function describe(app, e) {
     case 'declined': return w + ' n\'achète pas ' + s;
     case 'built': return w + ' construit sur ' + s;
     case 'sold': return w + ' revend un niveau sur ' + s;
+    case 'resold': return w + ' revend ' + s + ' à la banque (' + e.amount + ')';
     case 'mortgaged': return w + ' hypothèque ' + s;
     case 'unmortgaged': return w + ' lève l\'hypothèque de ' + s;
     case 'offer': return w + ' propose un échange à ' + t;
@@ -306,8 +307,9 @@ function actions(app) {
       return box(`<b>${esc(s.name)}</b> : le terrain, ou avec des maisons ?${later}`, levelButtons(b, me, me.pos, 'buy', 0, s.price) + btn('decline', 'Ne pas acheter'), 'mine');
     } break;
     case 'debt': if (mine) {
-      return box(`Tu dois <b>${fmt(g.debt.amount)}</b> à ${esc(nm(g.debt.to))} : vends ou hypothèque (clique tes propriétés), puis`,
-        btn('pay', 'Payer', 'main') + btn('bankrupt', 'Faillite', 'danger'), 'mine');
+      const short = me.cash < g.debt.amount;
+      return box(`Tu dois <b>${fmt(g.debt.amount)}</b> à ${esc(nm(g.debt.to))}` + (short ? ` : il te manque <b>${fmt(g.debt.amount - me.cash)}</b>.` : '.'),
+        `<button class="btn big ${short ? 'main' : ''}" data-do="openSale">🏷 Vendre</button>` + btn('pay', 'Payer', short ? '' : 'main') + btn('bankrupt', 'Faillite', 'danger'), 'mine');
     } break;
     case 'end': if (mine) return box(buildInfo(), build() + btn('end', 'Fin du tour ➜', build() ? '' : 'main'), 'mine');
   }
@@ -385,6 +387,47 @@ export function tradeModal(app) {
   </div>`;
 }
 
+// what the player who owes can sell back to the bank, to pay: their properties with what each
+// brings, the selection against what is missing
+export function saleModal(app) {
+  const { nm } = names(app), g = app.game, b = app.board;
+  const me = g.players.find(p => p.id === app.me);
+  if (g.phase !== 'debt' || !g.debt || g.debt.who !== app.me || !me) return '';
+  const mine = g.deeds.filter(d => d.owner === app.me);
+  const sellable = mine.filter(d => !d.mortgaged);
+  const picked = sellable.filter(d => app.sale.includes(d.square));
+  const gain = picked.reduce((n, d) => n + d.resale, 0), all = sellable.reduce((n, d) => n + d.resale, 0);
+  const need = Math.max(0, g.debt.amount - me.cash), after = me.cash + gain - g.debt.amount;
+  const levels = l => l === b.maxLevel ? '🏢' : '🏠'.repeat(l);
+  const row = d => {
+    const s = b.squares[d.square], on = app.sale.includes(d.square);
+    const color = s.kind === 'street' ? GROUP_COLORS[s.group] : '#2b2d42';
+    if (d.mortgaged) return `<div class="chip salerow off" style="--c:${color}"><span class="nm">${esc(s.name)}</span><span class="muted">hypothéquée</span></div>`;
+    return `<label class="chip salerow ${on ? 'on' : ''}" style="--c:${color}">
+      <input type="checkbox" data-sale-sq value="${d.square}" ${on ? 'checked' : ''}><i class="tick">${on ? '✓' : ''}</i>
+      <span class="nm">${esc(s.name)}</span>${d.level ? `<span class="lv">${levels(d.level)}</span>` : ''}${money(d.resale)}</label>`;
+  };
+  const pct = g.debt.amount ? Math.min(100, Math.round(100 * (me.cash + gain) / g.debt.amount)) : 100;
+  const short = me.cash + all < g.debt.amount; // selling everything would not be enough
+  const status = after >= 0 ? `Dette couverte : il te restera ${money(after)}.` :
+    `Il manque encore <b>${fmt(-after)}</b>.` + (short ? ' <span class="warn">Même en vendant tout, ce n\'est pas assez.</span>' : '');
+  const sell = !picked.length ? '<button class="btn big main" disabled>Vendre</button>' :
+    `<button class="btn big main" data-do="sell">${after >= 0 ? 'Vendre et payer' : 'Vendre'} (+${fmt(gain)})</button>`;
+  return `<div class="card modalbox sale">
+    <h2>Vendre pour payer</h2>
+    <p class="owe">Tu dois <b>${fmt(g.debt.amount)}</b> à <b>${esc(nm(g.debt.to))}</b>. Tu as ${money(me.cash)}${need ? `, il te manque <b>${fmt(need)}</b>` : ''}.</p>
+    <p class="muted hint">Une propriété vendue retourne à la banque avec ses constructions, à moitié de ce qu'elles ont coûté, et redevient libre.</p>
+    <div class="salelist">${mine.map(row).join('') || '<span class="muted">Tu n\'as aucune propriété.</span>'}</div>
+    <div class="saletotal">
+      <div class="row"><span class="grow">Sélection</span>${money(gain)}</div>
+      <div class="gauge ${after >= 0 ? 'ok' : ''}"><i style="width:${pct}%"></i></div>
+      <div class="status">${status}</div>
+    </div>
+    <div class="bar"><button class="btn" data-do="closeModal">Plus tard</button>
+      ${short ? '<button class="btn danger" data-do="act" data-a="bankrupt">Faillite</button>' : ''}${sell}</div>
+  </div>`;
+}
+
 export function overModal(app) {
   const { nm, colorOf } = names(app), g = app.game;
   const p = id => g.players.find(x => x.id === id);
@@ -419,7 +462,7 @@ export function rulesModal(app) {
       <li><b>Loyers</b> : quand tu as tout un groupe de couleur, ses rues sans maison rapportent le double, ses rues bâties une fois et demie.</li>
       <li><b>Le Départ</b> rapporte ${s ? s.salary : 'un salaire'} à chaque passage. En tombant pile dessus, pile ou face : un lancer de plus, ou construire sur la rue de ton choix (comme si tu y retombais).</li>
       <li><b>Fin du tour</b> : automatique quand il n'y a plus rien à faire. Si tu peux encore construire, termine-le toi-même.</li>
-      <li><b>Une dette</b> : vends, hypothèque ou échange pour payer, sinon c'est la faillite.</li>
+      <li><b>Une dette</b> : revends des propriétés à la banque (la moitié de ce qu'elles ont coûté, maisons comprises), hypothèque ou échange pour payer, sinon c'est la faillite.</li>
       <li><b>Échanges</b> : propriétés et argent, à tout moment, avec n'importe qui.</li>
       <li><b>Minuteur</b> : si tu tardes, le jeu joue à ta place.</li>
       <li><b>Fin</b> : ${end}.</li>
