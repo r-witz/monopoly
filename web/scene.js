@@ -120,7 +120,7 @@ function icon(ctx, glyph, x, y, size) {
 const ICONS = { transit: '🚋', card: '❓', tax: '💸', 'Compagnie des eaux': '💧', 'Centrale électrique': '⚡' };
 
 function tileTexture(sq, renderer) {
-  const corner = ['start', 'jail', 'rest', 'gotojail'].includes(sq.kind);
+  const corner = ['start', 'jail', 'airport', 'gotojail'].includes(sq.kind);
   const [c, ctx] = corner ? canvas(512, 512) : canvas(320, 512);
   const w = c.width, h = c.height;
   ctx.fillStyle = '#fff8e8';
@@ -141,7 +141,7 @@ function tileTexture(sq, renderer) {
     ctx.save();
     ctx.translate(w / 2, h / 2);
     ctx.rotate(-Math.PI / 4);
-    const big = { start: '🏁', jail: '🚓', rest: '🌳', gotojail: '👮' }[sq.kind];
+    const big = { start: '🏁', jail: '🚓', airport: '✈️', gotojail: '👮' }[sq.kind];
     icon(ctx, big, 0, -40, 120);
     ctx.fillStyle = sq.kind === 'gotojail' ? '#e63946' : '#1d2a3a';
     wrap(ctx, sq.name.toUpperCase(), 0, 90, 330, 54, 2);

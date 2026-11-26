@@ -11,7 +11,7 @@ import (
 type Phase string
 
 const (
-	PhaseRoll Phase = "roll" // the current player rolls (in jail: or pays, or uses a card)
+	PhaseRoll Phase = "roll" // the current player rolls (in jail: or pays, or uses a card; at the airport: or flies)
 	PhaseBuy  Phase = "buy"  // the current player buys the square they are on (a street with houses), or declines: it stays free
 	PhaseDebt Phase = "debt" // the current player raises the cash they owe, then pays, or goes bankrupt
 	PhaseEnd  Phase = "end"  // the current player may still build, then ends the turn; with nothing to build (or no cash for it), the turn passes by itself
@@ -45,7 +45,7 @@ const (
 // Action is a player's move. Which fields count depends on Kind.
 type Action struct {
 	Kind    string `json:"a"`       // see Apply
-	Square  int    `json:"square"`  // build
+	Square  int    `json:"square"`  // build, fly
 	Squares []int  `json:"squares"` // resell
 	Level   int    `json:"level"`   // buy: the houses bought with the street; build: the level to build up to
 	Offer   *Offer `json:"offer"`   // offer
@@ -108,6 +108,7 @@ type Game struct {
 	Step int
 
 	again     bool // the current player rolls again (a double, not out of jail)
+	fly       bool // the current player began the turn at the airport and may fly instead of rolling
 	here      int  // the street the current player landed on, theirs, and may build on now; -1: none
 	anywhere  bool // the current player landed right on the start and may build on a street of theirs now
 	extra     int  // rolls the current player won on the start, played once the doubles are over
@@ -169,6 +170,9 @@ func (g *Game) seat(id uint32) int {
 // changed. The actions:
 //
 //	roll                     the current player, PhaseRoll
+//	fly (square)             instead of the turn's first roll, the turn having begun at the airport: pay
+//	                         Board.FlightCost and go forward to any other square (the salary when passing
+//	                         the start), played as if landed there by the dice
 //	payjail, jailcard        leave the police station before rolling: pay the fine, or use a card
 //	buy (level), decline     PhaseBuy: the square the current player is on, a street with level houses (0 to 2, 3 once
 //	                         the player has passed the start, never the tower); declined, it stays free
@@ -200,6 +204,8 @@ func (g *Game) Apply(p int, a Action) ([]Event, error) {
 	switch a.Kind {
 	case "roll":
 		err = g.roll(p)
+	case "fly":
+		err = g.flyTo(p, a.Square)
 	case "payjail":
 		err = g.payJail(p)
 	case "jailcard":
@@ -426,7 +432,7 @@ func (g *Game) transfer(from, to, amount int) {
 
 // nextTurn hands the turn to the next player still in, or ends the game.
 func (g *Game) nextTurn() {
-	g.Doubles, g.again, g.Debt, g.here, g.anywhere, g.extra = 0, false, nil, -1, false, 0
+	g.Doubles, g.again, g.Debt, g.here, g.anywhere, g.extra, g.fly = 0, false, nil, -1, false, 0, false
 	if g.alive() <= 1 {
 		g.finish(-1, "")
 		return
@@ -447,6 +453,7 @@ func (g *Game) nextTurn() {
 		return
 	}
 	g.Turn = i
+	g.fly = g.Board.Squares[g.Players[i].Pos].Kind == KindAirport && !g.Players[i].InJail
 	g.setPhase(PhaseRoll)
 	g.emit(Event{Kind: "turn", Who: g.id(i)})
 }

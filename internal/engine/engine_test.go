@@ -58,6 +58,9 @@ func invariants(t *testing.T, g *Game) {
 	if (g.Phase == PhaseDebt) != (g.Debt != nil) {
 		t.Fatalf("phase %s with debt %v", g.Phase, g.Debt)
 	}
+	if g.fly && g.Phase != PhaseOver && (g.Phase != PhaseRoll || g.Board.Squares[g.Players[g.Turn].Pos].Kind != KindAirport || g.Players[g.Turn].InJail) {
+		t.Fatalf("may fly in phase %s from square %d", g.Phase, g.Players[g.Turn].Pos)
+	}
 	if g.Phase == PhaseEnd && !g.canBuild() {
 		t.Fatalf("phase end for seat %d, with nothing to build", g.Turn)
 	}
@@ -95,7 +98,7 @@ func invariants(t *testing.T, g *Game) {
 // randomAction is any action, legal or not, by any seat, with random arguments.
 func randomAction(g *Game, r *rand.Rand) (int, Action) {
 	kinds := []string{"roll", "roll", "roll", "buy", "buy", "decline", "build", "build", "pay", "pay", "bankrupt",
-		"end", "end", "end", "offer", "accept", "reject", "cancel", "payjail", "jailcard", "resell", "resell", "resell", "bogus"}
+		"end", "end", "end", "offer", "accept", "reject", "cancel", "payjail", "jailcard", "resell", "resell", "resell", "fly", "fly", "bogus"}
 	p := r.IntN(len(g.Players))
 	if r.IntN(2) == 0 {
 		p = g.Turn
@@ -441,7 +444,7 @@ func TestBoardLayout(t *testing.T) {
 	if len(b.Squares) != 40 {
 		t.Fatalf("%d squares, want 40", len(b.Squares))
 	}
-	corners := []Kind{KindStart, KindJail, KindRest, KindGoToJail}
+	corners := []Kind{KindStart, KindJail, KindAirport, KindGoToJail}
 	for side, k := range corners {
 		if b.Squares[side*10].Kind != k {
 			t.Fatalf("square %d is %s, want the corner %s", side*10, b.Squares[side*10].Kind, k)
@@ -745,5 +748,76 @@ func TestResell(t *testing.T) {
 		t.Fatalf("resold with the cash to pay: %v", err)
 	}
 	must(t, g, 0, Action{Kind: "pay"})
+	invariants(t, g)
+}
+
+// Landing on the airport: on the next turn, fly to any square for the flight's cost instead of
+// rolling, played as if landed there; rolling gives the flight up.
+func TestAirport(t *testing.T) {
+	g := newGame(2, testRules, 1)
+	airport, cost := 20, g.Board.FlightCost
+	if g.Board.Squares[airport].Kind != KindAirport || cost != 50 {
+		t.Fatalf("square %d is %s, flight %d", airport, g.Board.Squares[airport].Kind, cost)
+	}
+	g.Players[0].Pos = airport - 4
+	script(g, [2]int{1, 3}, [2]int{1, 2})
+	must(t, g, 0, Action{Kind: "roll"}) // the airport: nothing this turn, it passes
+	if g.Turn != 1 || g.View().Fly {
+		t.Fatalf("turn %d, fly %v", g.Turn, g.View().Fly)
+	}
+	if _, err := g.Apply(1, Action{Kind: "fly", Square: 5}); err != ErrPhase {
+		t.Fatalf("flew from the start: %v", err)
+	}
+	must(t, g, 1, Action{Kind: "roll"})
+	must(t, g, 1, Action{Kind: "decline"})
+	if g.Turn != 0 || !g.View().Fly {
+		t.Fatalf("turn %d, fly %v on the next turn", g.Turn, g.View().Fly)
+	}
+	for sq, want := range map[int]error{airport: ErrInvalid, -1: ErrInvalid, 40: ErrInvalid} {
+		if _, err := g.Apply(0, Action{Kind: "fly", Square: sq}); err != want {
+			t.Fatalf("flew to %d: %v", sq, err)
+		}
+	}
+	if _, err := g.Apply(1, Action{Kind: "fly", Square: 39}); err != ErrNotYours {
+		t.Fatalf("flew by another player: %v", err)
+	}
+	ev := must(t, g, 0, Action{Kind: "fly", Square: 39})
+	if !has(ev, "flew") || !has(ev, "moved") || has(ev, "salary") || g.Players[0].Pos != 39 || g.Players[0].Cash != 1500-cost || g.Phase != PhaseBuy || g.View().Fly {
+		t.Fatalf("pos %d cash %d phase %s, events %v", g.Players[0].Pos, g.Players[0].Cash, g.Phase, ev)
+	}
+	invariants(t, g)
+
+	// passing the start: the salary
+	g = newGame(2, testRules, 1)
+	g.Players[0].Pos, g.fly = airport, true
+	ev = must(t, g, 0, Action{Kind: "fly", Square: 5})
+	if !has(ev, "salary") || g.Players[0].Cash != 1500-cost+200 || g.Phase != PhaseBuy {
+		t.Fatalf("cash %d phase %s", g.Players[0].Cash, g.Phase)
+	}
+
+	// to the police: jailed
+	g = newGame(2, testRules, 1)
+	g.Players[0].Pos, g.fly = airport, true
+	must(t, g, 0, Action{Kind: "fly", Square: 30})
+	if !g.Players[0].InJail || g.Turn != 1 {
+		t.Fatalf("jail %v turn %d", g.Players[0].InJail, g.Turn)
+	}
+
+	// no cash for the flight; rolling gives it up, a double included
+	g = newGame(2, testRules, 1)
+	g.Players[0].Pos, g.fly = airport, true
+	g.transfer(0, -1, 1500-cost+1)
+	if _, err := g.Apply(0, Action{Kind: "fly", Square: 39}); err != ErrCash {
+		t.Fatalf("flew without the cash: %v", err)
+	}
+	g.transfer(-1, 0, 1000)
+	script(g, [2]int{1, 1})
+	must(t, g, 0, Action{Kind: "roll"}) // square 22, a card
+	for g.Phase != PhaseRoll {
+		g.Timeout()
+	}
+	if g.View().Fly {
+		t.Fatal("may fly after rolling")
+	}
 	invariants(t, g)
 }

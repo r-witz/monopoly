@@ -14,7 +14,7 @@ const (
 	KindCard     Kind = "card"     // draw a card
 	KindTax      Kind = "tax"      // pay the bank
 	KindJail     Kind = "jail"     // the police station: just visiting, or held there
-	KindRest     Kind = "rest"     // nothing happens
+	KindAirport  Kind = "airport"  // on the next turn, fly to any square for the flight's cost, or roll
 	KindGoToJail Kind = "gotojail" // straight to the police station
 )
 
@@ -65,6 +65,7 @@ type Board struct {
 	Jail          int      `json:"jail"`          // the square of the police station
 	JailFine      int      `json:"jailFine"`      // to leave it
 	JailTurns     int      `json:"jailTurns"`     // failed rolls before the fine is due anyway
+	FlightCost    int      `json:"flightCost"`    // flying from the airport to any square
 	MaxLevel      int      `json:"maxLevel"`      // levels 1 to MaxLevel-1 are houses, MaxLevel a tower
 	TransitRent   []int    `json:"transitRent"`   // by lines owned, 1 to 4
 	UtilityFactor []int    `json:"utilityFactor"` // times the dice, by utilities owned, 1 to 2
@@ -131,7 +132,7 @@ var Classic = &Board{
 		street("Porte Saint-Clair", 4, 180, 100, 250, 14, 85, 170, 255, 468),
 		street("Montée du Château", 4, 200, 100, 250, 16, 90, 180, 270, 495),
 
-		{Kind: KindRest, Name: "Jardin public"},
+		{Kind: KindAirport, Name: "Aéroport"},
 		street("Boulevard des Arts", 5, 220, 150, 375, 18, 113, 225, 338, 619),
 		{Kind: KindCard, Name: "Rumeur"},
 		street("Rue du Théâtre", 5, 220, 150, 375, 18, 113, 225, 338, 619),
@@ -161,7 +162,7 @@ var Classic = &Board{
 		{Text: "Trottinette sur le trottoir : payez 40.", Effect: Pay, Amount: 40},
 		{Text: "Retour au Départ.", Effect: MoveTo, Square: 0},
 		{Text: "Balade jusqu'à l'Esplanade du Belvédère.", Effect: MoveTo, Square: 37},
-		{Text: "Pique-nique au Jardin public.", Effect: MoveTo, Square: 20},
+		{Text: "Voyage d'affaires : rendez-vous à l'Aéroport.", Effect: MoveTo, Square: 20},
 		{Text: "Prenez la ligne la plus proche.", Effect: NextTransit},
 		{Text: "Demi-tour ! Reculez de 3 cases.", Effect: MoveBy, Amount: -3},
 		{Text: "Contrôle surprise : direction le poste.", Effect: ToJail},
@@ -172,6 +173,7 @@ var Classic = &Board{
 	Jail:          10,
 	JailFine:      50,
 	JailTurns:     3,
+	FlightCost:    50,
 	MaxLevel:      4,
 	TransitRent:   []int{25, 50, 100, 200},
 	UtilityFactor: []int{4, 10},

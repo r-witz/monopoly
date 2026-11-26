@@ -9,6 +9,7 @@ package engine
 //	rolled       who, dice
 //	salary       who, amount: passing or landing on the start
 //	moved        who, square: where they are now
+//	flew         who, square, amount: flies from the airport to square, having paid amount ("moved" follows)
 //	jailed       who, square: sent to the police station
 //	freed        who, amount: out of it, having paid amount (0: a double or a card)
 //	rent, tax    who, to (rent), square, amount: due; "debt" follows when who cannot pay
@@ -48,6 +49,7 @@ type View struct {
 	Doubles   int          `json:"doubles"`       // doubles in a row this turn: the player rolls again after one, the third sends them to jail
 	Here      int          `json:"here"`          // the street the current player may build on now, having landed on it; -1: none
 	Anywhere  bool         `json:"buildAnywhere"` // the current player landed right on the start, drew BonusBuild: may build on any street of theirs, once
+	Fly       bool         `json:"fly"`           // the current player began the turn at the airport: may fly to any square instead of rolling
 	Players   []PlayerView `json:"players"`       // in the order they play
 	Deeds     []DeedView   `json:"deeds"`         // the squares someone owns
 	Debt      *DebtView    `json:"debt,omitempty"`
@@ -89,7 +91,7 @@ type TradeView struct {
 }
 
 func (g *Game) View() View {
-	v := View{Phase: g.Phase, Turn: g.id(g.Turn), Round: g.Round, MaxRounds: g.Rules.MaxRounds, Dice: g.Dice, Doubles: g.Doubles, Here: -1, Anywhere: g.anywhere,
+	v := View{Phase: g.Phase, Turn: g.id(g.Turn), Round: g.Round, MaxRounds: g.Rules.MaxRounds, Dice: g.Dice, Doubles: g.Doubles, Here: -1, Anywhere: g.anywhere, Fly: g.fly,
 		Deeds: []DeedView{}, Trades: []TradeView{}, Winner: g.id(g.Winner), WinBy: g.WinBy}
 	if h := g.here; h >= 0 && g.Deeds[h].Owner == g.Turn {
 		v.Here = h // not once traded since landing

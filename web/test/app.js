@@ -88,6 +88,7 @@ function describe(e) {
     case 'declined': return w + ' n\'achète pas ' + s;
     case 'bonus': return w + ' tombe pile sur le Départ : ' + (e.by === 'roll' ? 'un lancer de plus' : 'construction sur la rue de son choix');
     case 'built': return w + ' construit sur ' + s + ' (niveau ' + e.level + ')';
+    case 'flew': return w + ' prend l\'avion pour ' + s + ' (-' + e.amount + ')';
     case 'resold': return w + ' revend ' + s + ' à la banque (+' + e.amount + ')';
     case 'offer': return w + ' propose un échange à ' + t;
     case 'traded': return w + ' accepte l\'échange de ' + t;
@@ -194,8 +195,11 @@ function squareDetail() {
   if (s.kind === 'utility') info = 'Loyer : dés × ' + board.utilityFactor.join(' (ou ×') + ' avec les deux).';
   if (s.kind === 'tax') info = 'À payer : ' + s.tax + '.';
   let actions = '';
+  if (game.fly && game.phase === 'roll' && game.turn === me && mine().pos !== selected) {
+    actions += `<button data-do="act" data-a="fly" data-sq="${selected}">S'envoler ici (${board.flightCost})</button>`;
+  }
   if (d && d.owner === me && game.phase === 'debt' && game.turn === me && mine().cash < game.debt.amount) {
-    actions = `<button data-do="resell" data-sq="${selected}">Revendre à la banque (+${d.resale})</button>`;
+    actions += `<button data-do="resell" data-sq="${selected}">Revendre à la banque (+${d.resale})</button>`;
   }
   return `<h3>${esc(s.name)}</h3><div>${s.price ? 'Prix ' + s.price + '. ' : ''}${info}</div>
     <div>${d ? 'À ' + esc(nm(d.owner)) + (d.level ? ', niveau ' + d.level : '') : s.price ? 'Libre.' : ''}</div>${actions}`;
@@ -229,7 +233,8 @@ function actions() {
   switch (game.phase) {
     case 'roll':
       if (!myTurn) break;
-      return upgrades() + b('roll', 'Lancer les dés', true) + (p.inJail ? b('payjail', 'Payer ' + board.jailFine) + (p.jailCards ? b('jailcard', 'Utiliser la carte') : '') : '');
+      return (game.fly ? 'Aéroport : clique une case pour t\'y envoler (' + board.flightCost + '), ou :<br>' : '') +
+        upgrades() + b('roll', 'Lancer les dés', true) + (p.inJail ? b('payjail', 'Payer ' + board.jailFine) + (p.jailCards ? b('jailcard', 'Utiliser la carte') : '') : '');
     case 'buy': {
       if (!myTurn) break;
       const s = board.squares[p.pos];

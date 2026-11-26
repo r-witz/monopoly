@@ -132,7 +132,7 @@ async function play({ m, at }) {
     if (dropped()) return;
     if (m.events.length) hud.render(app);
   }
-  let card = null;
+  let card = null, flight = false;
   for (const e of m.events) {
     app.log.unshift(hud.describe(app, e));
     hud.renderLog(app);
@@ -152,9 +152,14 @@ async function play({ m, at }) {
         }
         break;
       }
+      case 'flew':
+        flight = true;
+        if (!scene.fast) hud.banner('✈️ Décollage !', 1.1);
+        break;
       case 'moved':
-        await scene.movePawn(e.who, e.square, card && card.effect === 'moveBy' && card.amount < 0);
-        card = null;
+        if (flight) await scene.jump(e.who, e.square, false);
+        else await scene.movePawn(e.who, e.square, card && card.effect === 'moveBy' && card.amount < 0);
+        card = flight = null;
         break;
       case 'jailed':
         if (!scene.fast) hud.banner('🚓 Au poste !', 1.2);

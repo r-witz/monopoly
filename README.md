@@ -103,6 +103,9 @@ arrête et exclut, anti-flood, écriture non bloquante. Le protocole est décrit
   le Départ). Ensuite, on ajoute des maisons chaque fois qu'on retombe sur sa rue, une fois par
   passage, sans avoir besoin du groupe complet. La tour se construit sur une rue à 3 maisons, en y
   retombant. Une rue bâtie ne s'échange pas. Il n'y a pas d'hypothèque.
+- **Aéroport** (le coin opposé au Départ) : en s'y arrêtant, au tour suivant, au lieu de lancer
+  les dés, on peut s'envoler vers la case de son choix pour 50. On y joue comme si on y était
+  arrivé aux dés, et passer par le Départ rapporte le salaire. Lancer les dés renonce au vol.
 - **Départ pile** : en tombant pile sur le Départ (aux dés ou par une carte), pile ou face : un
   lancer de plus (après un éventuel double), ou construire sur la rue de son choix, comme si on y
   retombait.

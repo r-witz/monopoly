@@ -9,6 +9,7 @@ func (g *Game) roll(p int) error {
 	if g.Phase != PhaseRoll {
 		return ErrPhase
 	}
+	g.fly = false // rolling, the flight is given up
 	g.Dice = g.dice()
 	pl, sum, double := g.Players[p], g.Dice[0]+g.Dice[1], g.Dice[0] == g.Dice[1]
 	g.emit(Event{Kind: "rolled", Who: pl.ID, Dice: g.Dice[:]})
@@ -37,6 +38,25 @@ func (g *Game) roll(p int) error {
 		}
 	}
 	g.advance(p, sum)
+	return nil
+}
+
+// flyTo flies p from the airport to square sq: see Apply.
+func (g *Game) flyTo(p, sq int) error {
+	switch {
+	case p != g.Turn:
+		return ErrNotYours
+	case g.Phase != PhaseRoll || !g.fly:
+		return ErrPhase
+	case sq < 0 || sq >= len(g.Board.Squares) || sq == g.Players[p].Pos:
+		return ErrInvalid
+	case g.Players[p].Cash < g.Board.FlightCost:
+		return ErrCash
+	}
+	g.fly, g.again = false, false
+	g.transfer(p, -1, g.Board.FlightCost)
+	g.emit(Event{Kind: "flew", Who: g.id(p), Square: sq, Amount: g.Board.FlightCost})
+	g.forward(p, sq)
 	return nil
 }
 
@@ -91,7 +111,7 @@ func (g *Game) returnJailCards(n int) {
 func (g *Game) jail(p int) {
 	pl := g.Players[p]
 	pl.Pos, pl.InJail, pl.JailTurns = g.Board.Jail, true, 0
-	g.again, g.here, g.anywhere, g.extra = false, -1, false, 0
+	g.again, g.here, g.anywhere, g.extra, g.fly = false, -1, false, 0, false
 	g.emit(Event{Kind: "jailed", Who: pl.ID, Square: pl.Pos})
 }
 

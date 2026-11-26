@@ -23,6 +23,7 @@ export function describe(app, e) {
     case 'salary': return w + ' touche ' + e.amount + ' au Départ';
     case 'bonus': return w + ' tombe pile sur le Départ : ' + (e.by === 'roll' ? 'un lancer de plus 🎲' : 'construction sur la rue de son choix 🏗');
     case 'moved': return w + ' arrive sur ' + s;
+    case 'flew': return w + ' prend l\'avion pour ' + s + ' (' + e.amount + ') ✈️';
     case 'jailed': return w + ' est emmené au poste 🚓';
     case 'freed': return w + ' sort du poste' + (e.amount ? ' (' + e.amount + ')' : '');
     case 'rent': return w + ' doit ' + e.amount + ' de loyer à ' + t;
@@ -292,10 +293,12 @@ function actions(app) {
       if (mine) {
         const again = g.doubles > 0 && !me.inJail;
         const info = again ? '<b>Double !</b> Tu relances les dés.' + (g.doubles === 2 ? ' <span class="warn">Encore un double et c\'est le poste de police.</span>' : '') :
-          me.inJail ? 'Au poste : fais un double pour sortir, ou paie.' : '';
+          me.inJail ? 'Au poste : fais un double pour sortir, ou paie.' :
+          g.fly ? `✈️ <b>Aéroport</b> : clique une case du plateau pour t'y envoler (${fmt(b.flightCost)}), ou lance les dés.` : '';
         return box([info, buildInfo()].filter(Boolean).join(' '), build() + btn('roll', again ? '🎲 Relancer les dés' : '🎲 Lancer les dés', 'main') + (me.inJail ? btn('payjail', 'Payer ' + b.jailFine) + (me.jailCards ? btn('jailcard', '🃏 Carte') : '') : ''), 'mine');
       }
       if (g.doubles > 0) return box(`<b>${esc(nm(g.turn))}</b> a fait un double et relance les dés.`);
+      if (g.fly) return box(`✈️ <b>${esc(nm(g.turn))}</b> est à l'aéroport et peut s'envoler vers la case de son choix.`);
       break;
     case 'buy': if (mine) {
       const s = b.squares[me.pos];
@@ -333,6 +336,10 @@ function deed(app) {
   } else if (s.kind === 'tax') rows = `<tr><td>À payer</td><td>${s.tax}</td></tr>`;
   let acts = '';
   const me = g.players.find(p => p.id === app.me);
+  // at the airport, at the start of my turn: fly to this square instead of rolling
+  if (g.fly && g.phase === 'roll' && g.turn === app.me && me && me.pos !== app.selected) {
+    acts += `<button class="btn small main" data-do="act" data-a="fly" data-sq="${app.selected}" ${me.cash < b.flightCost ? 'disabled' : ''}>✈️ M'envoler ici ${money(b.flightCost)}</button>`;
+  }
   if (d && d.owner === app.me && me && !me.bankrupt && g.phase !== 'over') {
     // landed right on the start and drew building: any street of mine, from its card
     if (s.kind === 'street' && g.buildAnywhere && g.turn === app.me && (g.phase === 'roll' || g.phase === 'end')) {
@@ -454,6 +461,7 @@ export function rulesModal(app) {
       <li><b>Au poste</b>, pour sortir : fais un double, paie ${b.jailFine} ou joue une carte. Après ${b.jailTurns} essais, l'amende est due.</li>
       <li><b>Maisons</b> : en achetant une rue, prends-la nue ou avec 1 ou 2 maisons (3 après ton premier passage au Départ). Ensuite, chaque fois que tu retombes sur ta rue, ajoute des maisons, sans avoir besoin de tout le groupe. La tour se construit sur une rue à 3 maisons, en y retombant.</li>
       <li><b>Loyers</b> : quand tu as tout un groupe de couleur, ses rues sans maison rapportent le double, ses rues bâties une fois et demie.</li>
+      <li><b>L'Aéroport</b> : en t'y arrêtant, au tour suivant, au lieu de lancer les dés, envole-toi vers la case de ton choix pour ${b.flightCost} (en passant par le Départ, tu touches le salaire).</li>
       <li><b>Le Départ</b> rapporte ${s ? s.salary : 'un salaire'} à chaque passage. En tombant pile dessus, pile ou face : un lancer de plus, ou construire sur la rue de ton choix (comme si tu y retombais).</li>
       <li><b>Fin du tour</b> : automatique quand il n'y a plus rien à faire. Si tu peux encore construire, termine-le toi-même.</li>
       <li><b>Une dette</b> : s'il te manque de l'argent, revends des propriétés à la banque, au prix payé, maisons et tour comprises (ou échange). Sinon, c'est la faillite. On ne vend rien hors d'une dette.</li>
