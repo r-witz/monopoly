@@ -14,7 +14,7 @@ const (
 	KindCard     Kind = "card"     // draw a card
 	KindTax      Kind = "tax"      // pay the bank
 	KindJail     Kind = "jail"     // the police station: just visiting, or held there
-	KindRest     Kind = "rest"     // nothing happens
+	KindAirport  Kind = "airport"  // on the next turn, fly to any square for the flight's cost, or roll
 	KindGoToJail Kind = "gotojail" // straight to the police station
 )
 
@@ -24,8 +24,8 @@ type Square struct {
 	Group     int    `json:"group,omitempty"`     // streets: 1 to 8, the set to own whole for double rent and instant wins
 	Price     int    `json:"price,omitempty"`     // streets, transit, utilities
 	Rent      []int  `json:"rent,omitempty"`      // streets: by level, 0 (bare) to MaxLevel
-	BuildCost int    `json:"buildCost,omitempty"` // streets: one house; sold back for half
-	TowerCost int    `json:"towerCost,omitempty"` // streets: the tower, on top of the houses; sold back for half
+	BuildCost int    `json:"buildCost,omitempty"` // streets: one house
+	TowerCost int    `json:"towerCost,omitempty"` // streets: the tower, on top of the houses
 	Tax       int    `json:"tax,omitempty"`
 }
 
@@ -65,18 +65,11 @@ type Board struct {
 	Jail          int      `json:"jail"`          // the square of the police station
 	JailFine      int      `json:"jailFine"`      // to leave it
 	JailTurns     int      `json:"jailTurns"`     // failed rolls before the fine is due anyway
+	FlightCost    int      `json:"flightCost"`    // flying from the airport to any square
+	ResaleRate    int      `json:"resaleRate"`    // percent of what a property and its buildings cost, sold back to the bank
 	MaxLevel      int      `json:"maxLevel"`      // levels 1 to MaxLevel-1 are houses, MaxLevel a tower
 	TransitRent   []int    `json:"transitRent"`   // by lines owned, 1 to 4
 	UtilityFactor []int    `json:"utilityFactor"` // times the dice, by utilities owned, 1 to 2
-	MortgageRate  int      `json:"mortgageRate"`  // percent of the mortgage paid back on top of it to lift it
-}
-
-// mortgage is what mortgaging a square gives; lifting it costs that plus MortgageRate percent.
-func (b *Board) mortgage(sq int) int { return b.Squares[sq].Price / 2 }
-
-func (b *Board) unmortgage(sq int) int {
-	m := b.mortgage(sq)
-	return m + (m*b.MortgageRate+99)/100
 }
 
 // levelCost is what building level (1 to MaxLevel) of street sq costs: a house, or the tower.
@@ -140,7 +133,7 @@ var Classic = &Board{
 		street("Porte Saint-Clair", 4, 180, 100, 250, 14, 85, 170, 255, 468),
 		street("Montée du Château", 4, 200, 100, 250, 16, 90, 180, 270, 495),
 
-		{Kind: KindRest, Name: "Jardin public"},
+		{Kind: KindAirport, Name: "Aéroport"},
 		street("Boulevard des Arts", 5, 220, 150, 375, 18, 113, 225, 338, 619),
 		{Kind: KindCard, Name: "Rumeur"},
 		street("Rue du Théâtre", 5, 220, 150, 375, 18, 113, 225, 338, 619),
@@ -170,7 +163,7 @@ var Classic = &Board{
 		{Text: "Trottinette sur le trottoir : payez 40.", Effect: Pay, Amount: 40},
 		{Text: "Retour au Départ.", Effect: MoveTo, Square: 0},
 		{Text: "Balade jusqu'à l'Esplanade du Belvédère.", Effect: MoveTo, Square: 37},
-		{Text: "Pique-nique au Jardin public.", Effect: MoveTo, Square: 20},
+		{Text: "Voyage d'affaires : rendez-vous à l'Aéroport.", Effect: MoveTo, Square: 20},
 		{Text: "Prenez la ligne la plus proche.", Effect: NextTransit},
 		{Text: "Demi-tour ! Reculez de 3 cases.", Effect: MoveBy, Amount: -3},
 		{Text: "Contrôle surprise : direction le poste.", Effect: ToJail},
@@ -181,8 +174,9 @@ var Classic = &Board{
 	Jail:          10,
 	JailFine:      50,
 	JailTurns:     3,
+	FlightCost:    50,
+	ResaleRate:    75,
 	MaxLevel:      4,
 	TransitRent:   []int{25, 50, 100, 200},
 	UtilityFactor: []int{4, 10},
-	MortgageRate:  10,
 }

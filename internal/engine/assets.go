@@ -2,7 +2,8 @@ package engine
 
 import "slices"
 
-// Properties: building, mortgaging, and what happens to them when their owner goes bankrupt.
+// Properties: building, selling them back to the bank in debt, and what happens to them when
+// their owner goes bankrupt.
 
 // ownsGroup says whether p owns every street of the group.
 func (g *Game) ownsGroup(p, group int) bool {
@@ -51,7 +52,7 @@ func (g *Game) build(p, sq, level int) error {
 		return ErrInvalid
 	}
 	d := &g.Deeds[sq]
-	if d.Mortgaged || level <= d.Level || level > g.reach(p, d.Level) {
+	if level <= d.Level || level > g.reach(p, d.Level) {
 		return ErrInvalid
 	}
 	cost := g.Board.builtCost(sq, level) - g.Board.builtCost(sq, d.Level)
@@ -64,122 +65,108 @@ func (g *Game) build(p, sq, level int) error {
 	return nil
 }
 
-func (g *Game) sell(p, sq int) error {
-	if err := g.ownedBy(p, sq); err != nil {
-		return err
-	}
-	if g.Deeds[sq].Level == 0 {
-		return ErrInvalid
-	}
-	g.sellLevel(p, sq)
-	return nil
+// Resale is what selling square sq back to the bank brings: Board.ResaleRate percent of all it
+// cost, its price and every level built on it, rounded down.
+func (g *Game) Resale(sq int) int {
+	return (g.Board.Squares[sq].Price + g.Board.builtCost(sq, g.Deeds[sq].Level)) * g.Board.ResaleRate / 100
 }
 
-func (g *Game) sellLevel(p, sq int) {
-	d := &g.Deeds[sq]
-	back := g.Board.levelCost(sq, d.Level) / 2
-	g.transfer(-1, p, back)
-	d.Level--
-	g.emit(Event{Kind: "sold", Who: g.id(p), Square: sq, Level: d.Level, Amount: back})
-}
-
-// mortgageable says whether sq, owned, can be mortgaged: not already, and no building on it.
-func (g *Game) mortgageable(sq int) bool {
-	d := g.Deeds[sq]
-	return !d.Mortgaged && d.Level == 0
-}
-
-func (g *Game) mortgage(p, sq int) error {
-	if err := g.ownedBy(p, sq); err != nil {
-		return err
-	}
-	if !g.mortgageable(sq) {
-		return ErrInvalid
-	}
-	g.mortgageSquare(p, sq)
-	return nil
-}
-
-func (g *Game) mortgageSquare(p, sq int) {
-	g.Deeds[sq].Mortgaged = true
-	m := g.Board.mortgage(sq)
-	g.transfer(-1, p, m)
-	g.emit(Event{Kind: "mortgaged", Who: g.id(p), Square: sq, Amount: m})
-}
-
-func (g *Game) unmortgage(p, sq int) error {
-	if err := g.ownedBy(p, sq); err != nil {
-		return err
-	}
-	if !g.Deeds[sq].Mortgaged {
-		return ErrInvalid
-	}
-	if g.Phase == PhaseDebt && p == g.Turn { // owing: cash goes to the debt first
+// resell sells squares of p back to the bank, p owing more than their cash: see Apply. Once the
+// cash covers the debt, it is paid.
+func (g *Game) resell(p int, squares []int) error {
+	if g.Phase != PhaseDebt {
 		return ErrPhase
 	}
-	cost := g.Board.unmortgage(sq)
-	if g.Players[p].Cash < cost {
-		return ErrCash
+	if p != g.Turn {
+		return ErrNotYours
 	}
-	g.transfer(p, -1, cost)
-	g.Deeds[sq].Mortgaged = false
-	g.emit(Event{Kind: "unmortgaged", Who: g.id(p), Square: sq, Amount: cost})
+	if g.Players[p].Cash >= g.Debt.Amount { // enough to pay: nothing to sell
+		return ErrInvalid
+	}
+	if len(squares) == 0 || len(squares) > len(g.Deeds) || len(slices.Compact(slices.Sorted(slices.Values(squares)))) != len(squares) {
+		return ErrInvalid
+	}
+	for _, sq := range squares {
+		if err := g.ownedBy(p, sq); err != nil {
+			return err
+		}
+	}
+	for _, sq := range squares {
+		g.resellSquare(p, sq)
+	}
+	if g.Players[p].Cash >= g.Debt.Amount {
+		return g.payDebt(p) // cannot fail now
+	}
 	return nil
 }
 
-// liquidate sells p's buildings, then mortgages p's properties, until p has amount in cash or
-// nothing is left to sell. What the timer does for a player in debt.
+// resellSquare gives square sq of p back to the bank, its buildings with it, for its resale.
+func (g *Game) resellSquare(p, sq int) {
+	v := g.Resale(sq)
+	g.transfer(-1, p, v)
+	g.Deeds[sq] = Deed{Owner: -1}
+	g.emit(Event{Kind: "resold", Who: g.id(p), Square: sq, Amount: v})
+}
+
+// liquidate resells the properties of p whose resales add up to the least that covers what p is
+// missing to have amount in cash: as little as possible goes, the most valuable properties stay.
+// All of them when even that is not enough. What the timer does for a player in debt.
 func (g *Game) liquidate(p, amount int) {
-	for g.Players[p].Cash < amount {
-		if sq := g.nextToLiquidate(p); sq >= 0 {
-			if g.Deeds[sq].Level > 0 {
-				g.sellLevel(p, sq)
-			} else {
-				g.mortgageSquare(p, sq)
-			}
-			continue
+	missing := amount - g.Players[p].Cash
+	if missing <= 0 {
+		return
+	}
+	var squares, values []int
+	total := 0
+	for sq, d := range g.Deeds {
+		if d.Owner == p {
+			squares, values = append(squares, sq), append(values, g.Resale(sq))
+			total += values[len(values)-1]
+		}
+	}
+	if total <= missing {
+		for _, sq := range squares {
+			g.resellSquare(p, sq)
 		}
 		return
 	}
-}
-
-// nextToLiquidate is the street whose building p sells next, else the square p mortgages next,
-// else -1.
-func (g *Game) nextToLiquidate(p int) int {
-	for sq, d := range g.Deeds {
-		if d.Owner == p && d.Level > 0 {
-			return sq
+	// by[s]: 1 + the index of the property that first made a sale of exactly s, 0 for none yet
+	// (by[0]: the empty sale). The properties before it make s minus its value.
+	by := make([]int, total+1)
+	by[0] = -1
+	for i, v := range values {
+		for s := total; s >= v; s-- {
+			if by[s] == 0 && by[s-v] != 0 {
+				by[s] = i + 1
+			}
 		}
 	}
-	for sq, d := range g.Deeds {
-		if d.Owner == p && g.mortgageable(sq) {
-			return sq
-		}
+	s := missing
+	for by[s] == 0 { // total itself is a sale: the search ends
+		s++
 	}
-	return -1
+	for s > 0 {
+		i := by[s] - 1
+		g.resellSquare(p, squares[i])
+		s -= values[i]
+	}
 }
 
-// bankrupt takes p out of the game. Buildings are sold back to the bank; then cash, properties
-// (mortgaged or not) and cards go to the creditor to, or back to the bank (properties free and
-// clear) when to is -1.
+// bankrupt takes p out of the game. Buildings are sold back to the bank, at the resale rate; then
+// cash, properties and cards go to the creditor to, or back to the bank (properties free) when to
+// is -1.
 func (g *Game) bankrupt(p, to int) {
 	pl := g.Players[p]
 	for sq, d := range g.Deeds {
 		if d.Owner == p && d.Level > 0 {
-			for l := d.Level; l > 0; l-- {
-				g.transfer(-1, p, g.Board.levelCost(sq, l)/2)
-			}
+			g.transfer(-1, p, g.Board.builtCost(sq, d.Level)*g.Board.ResaleRate/100)
 			g.Deeds[sq].Level = 0
 		}
 	}
 	g.transfer(p, to, pl.Cash)
 	for sq := range g.Deeds {
 		if d := &g.Deeds[sq]; d.Owner == p {
-			if to >= 0 {
-				d.Owner = to
-			} else {
-				d.Owner, d.Mortgaged = -1, false
-			}
+			d.Owner = max(to, -1)
 		}
 	}
 	if to >= 0 {
@@ -192,7 +179,6 @@ func (g *Game) bankrupt(p, to int) {
 	pl.Out = g.out
 	g.emit(Event{Kind: "bankrupt", Who: pl.ID, To: g.id(to)})
 
-	g.Trades = slices.DeleteFunc(g.Trades, func(t *Trade) bool { return t.From == p || t.To == p })
 	if d := g.Debt; d != nil {
 		if p == g.Turn {
 			g.Debt = nil

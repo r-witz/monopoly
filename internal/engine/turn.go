@@ -9,6 +9,7 @@ func (g *Game) roll(p int) error {
 	if g.Phase != PhaseRoll {
 		return ErrPhase
 	}
+	g.fly = false // rolling, the flight is given up
 	g.Dice = g.dice()
 	pl, sum, double := g.Players[p], g.Dice[0]+g.Dice[1], g.Dice[0] == g.Dice[1]
 	g.emit(Event{Kind: "rolled", Who: pl.ID, Dice: g.Dice[:]})
@@ -37,6 +38,28 @@ func (g *Game) roll(p int) error {
 		}
 	}
 	g.advance(p, sum)
+	return nil
+}
+
+// flyTo flies p from the airport to square sq: see Apply.
+func (g *Game) flyTo(p, sq int) error {
+	switch {
+	case p != g.Turn:
+		return ErrNotYours
+	case g.Phase != PhaseRoll || !g.fly:
+		return ErrPhase
+	case sq < 0 || sq >= len(g.Board.Squares) || sq == g.Players[p].Pos || g.Board.Squares[sq].Kind == KindStart:
+		return ErrInvalid
+	case g.Players[p].Cash < g.Board.FlightCost:
+		return ErrCash
+	}
+	pl := g.Players[p]
+	g.fly, g.here, g.anywhere = false, -1, false
+	g.transfer(p, -1, g.Board.FlightCost)
+	g.emit(Event{Kind: "flew", Who: pl.ID, Square: sq, Amount: g.Board.FlightCost})
+	pl.Pos = sq // over the board: no salary, no lap
+	g.emit(Event{Kind: "moved", Who: pl.ID, Square: sq})
+	g.land(p)
 	return nil
 }
 
@@ -91,7 +114,7 @@ func (g *Game) returnJailCards(n int) {
 func (g *Game) jail(p int) {
 	pl := g.Players[p]
 	pl.Pos, pl.InJail, pl.JailTurns = g.Board.Jail, true, 0
-	g.again, g.here, g.anywhere, g.extra = false, -1, false, 0
+	g.again, g.here, g.anywhere, g.extra, g.fly = false, -1, false, 0, false
 	g.emit(Event{Kind: "jailed", Who: pl.ID, Square: pl.Pos})
 }
 
@@ -133,11 +156,9 @@ func (g *Game) land(p int) {
 		case d.Owner < 0:
 			g.setPhase(PhaseBuy)
 		case d.Owner == p:
-			if sq.Kind == KindStreet && !d.Mortgaged && g.reach(p, d.Level) > d.Level {
+			if sq.Kind == KindStreet && g.reach(p, d.Level) > d.Level {
 				g.here = pl.Pos
 			}
-			g.settle()
-		case d.Mortgaged:
 			g.settle()
 		default:
 			rent := g.rent(pl.Pos)
@@ -173,7 +194,8 @@ func (g *Game) startBonus(p int) {
 }
 
 // settle is the end of the current player's move: they roll again after a double, then for
-// each roll won on the start, else they may end their turn.
+// each roll won on the start, else they may still build before ending their turn, else the
+// turn passes.
 func (g *Game) settle() {
 	switch pl := g.Players[g.Turn]; {
 	case pl.Bankrupt:
@@ -184,12 +206,14 @@ func (g *Game) settle() {
 		g.extra--
 		g.Doubles = 0 // a new run: its doubles count from none
 		g.setPhase(PhaseRoll)
-	default:
+	case g.canBuild():
 		g.setPhase(PhaseEnd)
+	default:
+		g.nextTurn()
 	}
 }
 
-// rent is what landing on square sq costs, owned by someone else and not mortgaged. A street
+// rent is what landing on square sq costs, owned by someone else. A street
 // of a group owned whole: twice its bare rent, or 1.5 times its rent with buildings (rounded,
 // half up).
 func (g *Game) rent(sq int) int {
@@ -250,9 +274,6 @@ func (g *Game) payDebt(p int) error {
 	g.transfer(p, d.To, d.Amount)
 	g.Debt = nil
 	g.emit(Event{Kind: "paid", Who: g.id(p), To: g.id(d.To), Amount: d.Amount})
-	if g.checkWin(p) { // what p got by a trade while owing
-		return nil
-	}
 	d.then()
 	return nil
 }

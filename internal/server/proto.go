@@ -30,7 +30,7 @@ import (
 //	{"t":"kick","id":7}                        take a player out of the room (the owner): during a game they
 //	                                           resign; they may come back with the link, to watch
 //	{"t":"act","a":"roll",...}                 a move of the game: engine.Action's fields ("a", "square",
-//	                                           "level", "offer", "trade"), see engine.Game.Apply
+//	                                           "squares", "level"), see engine.Game.Apply
 //
 // Server -> client, JSON text frames:
 //

@@ -120,7 +120,7 @@ function icon(ctx, glyph, x, y, size) {
 const ICONS = { transit: '🚋', card: '❓', tax: '💸', 'Compagnie des eaux': '💧', 'Centrale électrique': '⚡' };
 
 function tileTexture(sq, renderer) {
-  const corner = ['start', 'jail', 'rest', 'gotojail'].includes(sq.kind);
+  const corner = ['start', 'jail', 'airport', 'gotojail'].includes(sq.kind);
   const [c, ctx] = corner ? canvas(512, 512) : canvas(320, 512);
   const w = c.width, h = c.height;
   ctx.fillStyle = '#fff8e8';
@@ -141,7 +141,7 @@ function tileTexture(sq, renderer) {
     ctx.save();
     ctx.translate(w / 2, h / 2);
     ctx.rotate(-Math.PI / 4);
-    const big = { start: '🏁', jail: '🚓', rest: '🌳', gotojail: '👮' }[sq.kind];
+    const big = { start: '🏁', jail: '🚓', airport: '✈️', gotojail: '👮' }[sq.kind];
     icon(ctx, big, 0, -40, 120);
     ctx.fillStyle = sq.kind === 'gotojail' ? '#e63946' : '#1d2a3a';
     wrap(ctx, sq.name.toUpperCase(), 0, 90, 330, 54, 2);
@@ -344,7 +344,7 @@ export class Scene {
     this.buildBoard();
     this.buildDice();
     this.pawns = new Map(); // id -> {g, seat, pos, jail, color, out}
-    this.deeds = new Map(); // square -> {owner, level, mortgaged, marker, buildings, veil}
+    this.deeds = new Map(); // square -> {owner, level, marker, buildings}
     this.cash = new Map();
 
     // camera: orbit around a target that follows the action
@@ -789,11 +789,11 @@ export class Scene {
 
   // --- properties ---
 
-  // setDeed shows square sq owned by color (null: the bank), at level, mortgaged or not
-  async setDeed(sq, owner, color, level, mortgaged, animate) {
+  // setDeed shows square sq owned by color (null: the bank), at level
+  async setDeed(sq, owner, color, level, animate) {
     const t = this.tiles[sq], group = this.board.squares[sq].group;
     let d = this.deeds.get(sq);
-    if (!d) { d = { owner: 0, level: 0, mortgaged: false, marker: null, buildings: [], veil: null }; this.deeds.set(sq, d); }
+    if (!d) { d = { owner: 0, level: 0, marker: null, buildings: [] }; this.deeds.set(sq, d); }
     const jobs = [];
     if (d.owner !== owner) {
       if (d.marker) { t.g.remove(d.marker); d.marker = null; }
@@ -835,29 +835,6 @@ export class Scene {
       });
       if (animate) jobs.push(this.puff(sq));
       d.level = level;
-    }
-    if (d.mortgaged !== mortgaged) {
-      if (d.veil) { t.g.remove(d.veil); d.veil.material.map.dispose(); d.veil.material.dispose(); d.veil.geometry.dispose(); d.veil = null; }
-      if (mortgaged) {
-        const cw = 256, ch = Math.round(256 * t.d / t.w);
-        const [c, ctx] = canvas(cw, ch);
-        ctx.fillStyle = 'rgba(29,42,58,.55)';
-        ctx.fillRect(0, 0, cw, ch);
-        ctx.translate(cw / 2, ch / 2);
-        ctx.rotate(-Math.atan2(ch, cw));
-        ctx.font = `800 34px ${DISPLAY}`;
-        ctx.textAlign = 'center';
-        ctx.fillStyle = '#ffd23f';
-        ctx.fillText('HYPOTHÈQUE', 0, 12);
-        const tex = new THREE.CanvasTexture(c);
-        tex.colorSpace = THREE.SRGBColorSpace;
-        const veil = new THREE.Mesh(new THREE.PlaneGeometry(t.w - 0.06, t.d - 0.06), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
-        veil.rotation.x = -Math.PI / 2;
-        veil.position.y = TOP + 0.004;
-        t.g.add(veil);
-        d.veil = veil;
-      }
-      d.mortgaged = mortgaged;
     }
     await Promise.all(jobs);
   }
@@ -937,7 +914,7 @@ export class Scene {
     this.board.squares.forEach((sq, i) => {
       if (!sq.price) return;
       const d = owned.get(i);
-      jobs.push(this.setDeed(i, d ? d.owner : 0, d ? colorOf(d.owner) : null, d ? d.level : 0, d ? d.mortgaged : false, animate));
+      jobs.push(this.setDeed(i, d ? d.owner : 0, d ? colorOf(d.owner) : null, d ? d.level : 0, animate));
     });
     this.setCurrent(state.phase === 'over' ? 0 : state.turn);
     await Promise.all(jobs);
@@ -948,7 +925,7 @@ export class Scene {
     this.cash.clear();
     for (const [sq, d] of this.deeds) {
       const t = this.tiles[sq];
-      for (const o of [d.marker, d.veil, ...d.buildings]) if (o) t.g.remove(o);
+      for (const o of [d.marker, ...d.buildings]) if (o) t.g.remove(o);
     }
     this.deeds.clear();
     this.dice.forEach(d => { d.visible = false; });

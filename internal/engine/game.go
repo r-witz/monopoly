@@ -6,15 +6,14 @@ import (
 	"slices"
 )
 
-// Phase is the decision the game waits for. Everything else a player may do (manage their
-// properties, trade) happens around it.
+// Phase is the decision the game waits for.
 type Phase string
 
 const (
-	PhaseRoll Phase = "roll" // the current player rolls (in jail: or pays, or uses a card)
+	PhaseRoll Phase = "roll" // the current player rolls (in jail: or pays, or uses a card; at the airport: or flies)
 	PhaseBuy  Phase = "buy"  // the current player buys the square they are on (a street with houses), or declines: it stays free
 	PhaseDebt Phase = "debt" // the current player raises the cash they owe, then pays, or goes bankrupt
-	PhaseEnd  Phase = "end"  // the current player may still manage, then ends the turn
+	PhaseEnd  Phase = "end"  // the current player may still build, then ends the turn; with nothing to build (or no cash for it), the turn passes by itself
 	PhaseOver Phase = "over"
 )
 
@@ -23,7 +22,7 @@ type Rules struct {
 	StartCash int // each player's cash at the start, their only asset
 	Salary    int // when passing or landing on the start
 	MaxRounds int // the game ends after this many rounds, the richest winning; 0: no limit
-	// Instant wins: owning these ends the game at once, whatever the mortgages.
+	// Instant wins: owning these ends the game at once.
 	WinTransit bool // every transit line
 	WinGroups  bool // 3 whole groups
 	WinSide    bool // every street of a side of the board
@@ -44,11 +43,10 @@ const (
 
 // Action is a player's move. Which fields count depends on Kind.
 type Action struct {
-	Kind   string `json:"a"`      // see Apply
-	Square int    `json:"square"` // build, sell, mortgage, unmortgage
-	Level  int    `json:"level"`  // buy: the houses bought with the street; build: the level to build up to
-	Offer  *Offer `json:"offer"`  // offer
-	Trade  int    `json:"trade"`  // accept, reject, cancel: the trade's ID
+	Kind    string `json:"a"`       // see Apply
+	Square  int    `json:"square"`  // build, fly
+	Squares []int  `json:"squares"` // resell
+	Level   int    `json:"level"`   // buy: the houses bought with the street; build: the level to build up to
 }
 
 // Errors of Apply. Nothing changed when one is returned.
@@ -76,9 +74,8 @@ type Player struct {
 
 // Deed is the state of a square that can be owned. Owner is a seat, -1 for the bank.
 type Deed struct {
-	Owner     int
-	Level     int
-	Mortgaged bool
+	Owner int
+	Level int
 }
 
 // Debt is what the current player owes and cannot pay yet. To is a seat, -1 for the bank.
@@ -100,25 +97,24 @@ type Game struct {
 	Dice    [2]int // the last roll
 	Doubles int    // in a row, this turn
 	Debt    *Debt
-	Trades  []*Trade
 	Winner  int    // seat, -1 before the end (and when the game was stopped with nobody in)
 	WinBy   string // an instant win (WinByTransit…), "" when the richest won
 	// Step changes whenever the decision the game waits for changes: a timer
 	// started for one step is void once Step moved on.
 	Step int
 
-	again     bool // the current player rolls again (a double, not out of jail)
-	here      int  // the street the current player landed on, theirs, and may build on now; -1: none
-	anywhere  bool // the current player landed right on the start and may build on a street of theirs now
-	extra     int  // rolls the current player won on the start, played once the doubles are over
-	deck      []int
-	nextTrade int
-	out       int // players bankrupt so far
-	bank      int // money the bank put into the game, net: sum of cash = players*StartCash + bank
-	rng       *rand.Rand
-	dice      func() [2]int
-	coin      func() bool // heads or tails: what landing right on the start gives
-	events    []Event
+	again    bool // the current player rolls again (a double, not out of jail)
+	fly      bool // the current player began the turn at the airport and may fly instead of rolling
+	here     int  // the street the current player landed on, theirs, and may build on now; -1: none
+	anywhere bool // the current player landed right on the start and may build on a street of theirs now
+	extra    int  // rolls the current player won on the start, played once the doubles are over
+	deck     []int
+	out      int // players bankrupt so far
+	bank     int // money the bank put into the game, net: sum of cash = players*StartCash + bank
+	rng      *rand.Rand
+	dice     func() [2]int
+	coin     func() bool // heads or tails: what landing right on the start gives
+	events   []Event
 }
 
 // New starts a game for these players, in this order, the first one to play. seed fixes every
@@ -169,23 +165,23 @@ func (g *Game) seat(id uint32) int {
 // changed. The actions:
 //
 //	roll                     the current player, PhaseRoll
+//	fly (square)             instead of the turn's first roll, the turn having begun at the airport: pay
+//	                         Board.FlightCost and fly to any other square but the start, played as if
+//	                         landed there by the dice. Over the board: no salary, no lap
 //	payjail, jailcard        leave the police station before rolling: pay the fine, or use a card
 //	buy (level), decline     PhaseBuy: the square the current player is on, a street with level houses (0 to 2, 3 once
 //	                         the player has passed the start, never the tower); declined, it stays free
 //	build (square, level)    the current player, PhaseRoll or PhaseEnd, on the street of theirs they just
 //	                         landed on, or on any street of theirs after landing right on the start and
-//	                         drawing BonusBuild (not mortgaged; the group need not be whole): up to level,
+//	                         drawing BonusBuild (the group need not be whole): up to level,
 //	                         once per landing. Houses up to 2, 3 once the player has passed the start; the tower only
 //	                         on a street that already had 3 houses
-//	sell (square)            one level of a street, at any time
-//	mortgage, unmortgage     at any time, not while the player owes (unmortgage); a
-//	                         street only with no building on it
+//	resell (squares)         PhaseDebt, the player who owes, short of cash: sell these properties back
+//	                         to the bank, with their buildings, at Board.ResaleRate (see Resale); they are
+//	                         free again. The only sale there is. The debt is paid once the cash covers it
 //	pay, bankrupt            PhaseDebt: pay what is owed, or give up: everything goes to the creditor
-//	end                      PhaseEnd: the next player's turn
-//	offer (offer)            propose a trade, replacing the proposer's open one; at any time. A
-//	                         counter-offer is a reject, then an offer of one's own
-//	accept, reject (trade)   the player the trade was offered to; accept checks it again
-//	cancel (trade)           the proposer
+//	end                      PhaseEnd: the next player's turn. Unasked, once the current player has
+//	                         nothing left to build, or not the cash for it (see canBuild)
 func (g *Game) Apply(p int, a Action) ([]Event, error) {
 	g.events = nil
 	if g.Phase == PhaseOver {
@@ -198,6 +194,8 @@ func (g *Game) Apply(p int, a Action) ([]Event, error) {
 	switch a.Kind {
 	case "roll":
 		err = g.roll(p)
+	case "fly":
+		err = g.flyTo(p, a.Square)
 	case "payjail":
 		err = g.payJail(p)
 	case "jailcard":
@@ -208,12 +206,8 @@ func (g *Game) Apply(p int, a Action) ([]Event, error) {
 		err = g.decline(p)
 	case "build":
 		err = g.build(p, a.Square, a.Level)
-	case "sell":
-		err = g.sell(p, a.Square)
-	case "mortgage":
-		err = g.mortgage(p, a.Square)
-	case "unmortgage":
-		err = g.unmortgage(p, a.Square)
+	case "resell":
+		err = g.resell(p, a.Squares)
 	case "pay":
 		err = g.payDebt(p)
 	case "bankrupt":
@@ -224,14 +218,6 @@ func (g *Game) Apply(p int, a Action) ([]Event, error) {
 		}
 	case "end":
 		err = g.endTurn(p)
-	case "offer":
-		err = g.offer(p, a.Offer)
-	case "accept":
-		err = g.accept(p, a.Trade)
-	case "reject":
-		err = g.reject(p, a.Trade)
-	case "cancel":
-		err = g.cancel(p, a.Trade)
 	default:
 		err = ErrUnknown
 	}
@@ -239,11 +225,12 @@ func (g *Game) Apply(p int, a Action) ([]Event, error) {
 		g.events = nil
 		return nil, err
 	}
+	g.passIfDone() // the build done
 	return g.flush(), nil
 }
 
 // Timeout plays what the rules do when the player who must decide does not: roll, decline,
-// raise the cash owed by selling and mortgaging (or go bankrupt), end the turn. It always moves the game on.
+// raise the cash owed by reselling properties (or go bankrupt), end the turn. It always moves the game on.
 func (g *Game) Timeout() []Event {
 	g.events = nil
 	switch g.Phase {
@@ -287,7 +274,7 @@ func (g *Game) Finish() []Event {
 
 // finish ends the game: winner wins by an instant win (by), or with -1 the richest wins.
 func (g *Game) finish(winner int, by string) {
-	g.Debt, g.Trades = nil, nil
+	g.Debt = nil
 	g.setPhase(PhaseOver)
 	g.Winner, g.WinBy = winner, by
 	if winner < 0 {
@@ -299,8 +286,8 @@ func (g *Game) finish(winner int, by string) {
 }
 
 // checkWin ends the game when one of the players ps, in that order, owns what an instant win of
-// the rules asks for, and says whether it did. A player who owes money cannot win before paying
-// it (payDebt checks again then): winning would wipe the debt out.
+// the rules asks for, and says whether it did. A player who owes money cannot win: winning would
+// wipe the debt out.
 func (g *Game) checkWin(ps ...int) bool {
 	for _, p := range ps {
 		if p < 0 || g.Players[p].Bankrupt || g.Debt != nil && p == g.Turn {
@@ -368,19 +355,14 @@ func (g *Game) instantWin(p int) string {
 	return ""
 }
 
-// Worth is what a player has: cash, properties at their price (half when mortgaged), buildings
-// at their cost.
+// Worth is what a player has: cash, properties at their price, buildings at their cost.
 func (g *Game) Worth(p int) int {
 	w := g.Players[p].Cash
 	for sq, d := range g.Deeds {
 		if d.Owner != p {
 			continue
 		}
-		s := &g.Board.Squares[sq]
-		w += s.Price + g.Board.builtCost(sq, d.Level)
-		if d.Mortgaged {
-			w -= g.Board.mortgage(sq)
-		}
+		w += g.Board.Squares[sq].Price + g.Board.builtCost(sq, d.Level)
 	}
 	return w
 }
@@ -431,7 +413,7 @@ func (g *Game) transfer(from, to, amount int) {
 
 // nextTurn hands the turn to the next player still in, or ends the game.
 func (g *Game) nextTurn() {
-	g.Doubles, g.again, g.Debt, g.here, g.anywhere, g.extra = 0, false, nil, -1, false, 0
+	g.Doubles, g.again, g.Debt, g.here, g.anywhere, g.extra, g.fly = 0, false, nil, -1, false, 0, false
 	if g.alive() <= 1 {
 		g.finish(-1, "")
 		return
@@ -452,8 +434,39 @@ func (g *Game) nextTurn() {
 		return
 	}
 	g.Turn = i
+	g.fly = g.Board.Squares[g.Players[i].Pos].Kind == KindAirport && !g.Players[i].InJail
 	g.setPhase(PhaseRoll)
 	g.emit(Event{Kind: "turn", Who: g.id(i)})
+}
+
+// canBuild says whether the current player may still build now, and has the cash for a level
+// at least: on the street they landed on, or on any street of theirs after landing right on the
+// start.
+func (g *Game) canBuild() bool {
+	p := g.Turn
+	ok := func(sq int) bool {
+		d := g.Deeds[sq]
+		return d.Owner == p && g.Board.Squares[sq].Kind == KindStreet && g.reach(p, d.Level) > d.Level &&
+			g.Players[p].Cash >= g.Board.levelCost(sq, d.Level+1)
+	}
+	if g.here >= 0 && ok(g.here) {
+		return true
+	}
+	if g.anywhere {
+		for sq := range g.Deeds {
+			if ok(sq) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// passIfDone hands the turn on when the current player waits in PhaseEnd with nothing to build.
+func (g *Game) passIfDone() {
+	if g.Phase == PhaseEnd && !g.canBuild() {
+		g.nextTurn()
+	}
 }
 
 func (g *Game) endTurn(p int) error {

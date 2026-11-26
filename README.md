@@ -64,7 +64,7 @@ web/                 le client 3D, sans compilation (modules ES)
   scene.js           la 3D (Three.js r170 embarqué dans web/vendor) : île, plateau, cases dessinées
                      depuis le plateau du serveur, pions, dés, maisons, caméra, clic sur une case
   hud.js             l'interface HTML par-dessus : accueil, salon, joueurs, actions, fiche de case,
-                     échanges, journal, carte piochée, podium
+                     vente en dette, journal, carte piochée, podium
   main.js            connexion, état, clics ; joue les événements d'un message « game » l'un après
                      l'autre (dés, pion case par case, carte…), puis affiche l'état
   vendor/            Three.js (MIT), polices DynaPuff et Nunito (OFL), reprises du golf
@@ -73,8 +73,8 @@ internal/engine      les règles, une machine à états pure : ni horloge, ni r�
   board.go           le plateau et les cartes (données)
   game.go            état, phases, Apply / Timeout / Resign / Finish, classement
   turn.go            dés, déplacement, cases, cartes, prison, dettes
-  assets.go          constructions, hypothèques, liquidation, faillite
-  market.go          achats, échanges
+  assets.go          constructions, revente à la banque, liquidation, faillite
+  market.go          achats
   view.go            ce que reçoivent les clients (état complet + événements)
 internal/server      salles et connexions, repris de P'tits Trous (../golf) : hub, room, conn, shard
   game.go            la partie dans la salle : démarrage, minuteurs, diffusion
@@ -94,7 +94,7 @@ arrête et exclut, anti-flood, écriture non bloquante. Le protocole est décrit
 - **Victoire immédiate** (chacune activable dans les paramètres) : posséder les 4 lignes de
   transport, 3 quartiers complets (ces deux-là actives par défaut), ou tous les quartiers d'un
   même côté du plateau (désactivée par défaut : ses 2 quartiers coûtent peu) termine la partie
-  aussitôt, hypothéqués ou non. Vérifié à chaque achat, échange accepté ou faillite qui
+  aussitôt. Vérifié à chaque achat ou faillite qui
   donne des propriétés à un créancier. Un joueur endetté ne gagne qu'après avoir payé sa dette.
 - On lance 2 dés. Un double fait rejouer, trois doubles envoient au poste de police. Pour sortir :
   faire un double, payer 50 ou jouer une carte. Après 3 essais, l'amende est due de toute façon.
@@ -102,7 +102,11 @@ arrête et exclut, anti-flood, écriture non bloquante. Le protocole est décrit
 - **Maisons** : en achetant une rue, on la prend nue ou avec 1 ou 2 maisons (3 une fois passé
   le Départ). Ensuite, on ajoute des maisons chaque fois qu'on retombe sur sa rue, une fois par
   passage, sans avoir besoin du groupe complet. La tour se construit sur une rue à 3 maisons, en y
-  retombant. Une rue bâtie ne s'hypothèque pas et ne s'échange pas.
+  retombant. Il n'y a ni hypothèque ni échange entre joueurs.
+- **Aéroport** (le coin opposé au Départ) : en s'y arrêtant, au tour suivant, au lieu de lancer
+  les dés, on peut s'envoler vers la case de son choix pour 50, sauf le Départ. On y joue comme si
+  on y était arrivé aux dés. Un vol ne passe pas par le Départ : ni salaire, ni tour du plateau.
+  Lancer les dés renonce au vol.
 - **Départ pile** : en tombant pile sur le Départ (aux dés ou par une carte), pile ou face : un
   lancer de plus (après un éventuel double), ou construire sur la rue de son choix, comme si on y
   retombait.
@@ -111,13 +115,17 @@ arrête et exclut, anti-flood, écriture non bloquante. Le protocole est décrit
   Tour, en milliers (on démarre avec 2 000, ses 2 millions) : prix, maisons, et une tour plus
   chère qu'une maison (150 à 500, comme son hôtel). Les loyers viennent des relevés d'un joueur.
   Lignes, compagnies, taxes et amende restent celles du jeu classique.
-- **Dette** : on vend, on hypothèque ou on échange pour payer, sinon c'est la faillite. Tout part
-  alors au créancier, ou retourne à la banque.
-- **Échanges** : propriétés et argent dans les deux sens, à tout moment. Une offre est revérifiée
-  à l'acceptation, et un nouvel envoi remplace l'offre précédente du même joueur.
+- **Fin du tour** : elle se fait toute seule dès qu'il n'y a plus rien à décider. Le joueur ne la
+  donne à la main que s'il peut encore construire (sur sa rue, ou au Départ pile) et a de quoi
+  payer au moins un niveau.
+- **Dette** : quand on doit plus que son argent, une fenêtre s'ouvre pour revendre à la banque les
+  propriétés de son choix, pour 75 % de ce qu'elles ont coûté, maisons et tour comprises (arrondi
+  en dessous). Elles redeviennent libres, et la dette est payée dès que l'argent la couvre. Sinon,
+  c'est la faillite : les constructions sont rachetées par la banque à 75 %, et tout part au
+  créancier, ou retourne à la banque. On ne vend jamais rien hors d'une dette.
 - **Minuteur** : si le joueur ne décide pas à temps, le serveur joue à sa place. Il lance les dés,
-  refuse l'achat, vend et hypothèque pour payer une dette (ou déclare la faillite), puis finit le
-  tour. Une partie ne bloque donc jamais.
+  refuse l'achat, revend des propriétés pour payer une dette (celles dont le total couvre la
+  dette au plus juste, pour garder les plus belles ; ou déclare la faillite), puis finit le tour. Une partie ne bloque donc jamais.
 
 Choix faits pour la salle :
 
@@ -126,6 +134,3 @@ Choix faits pour la salle :
   banque ;
 - un joueur déconnecté garde sa place 5 minutes, le minuteur jouant pour lui. Au-delà, il
   abandonne.
-
-Limite connue : un joueur endetté peut encore céder ses propriétés par échange avant de faire
-faillite. Il ne peut pas céder d'argent.

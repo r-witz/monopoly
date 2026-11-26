@@ -1,5 +1,5 @@
 // Everything drawn in HTML over the board: the screens before a game, and during one the players,
-// what to do, the square selected, the trades and the log. render(app) draws it all from app.
+// what to do, the square selected and the log. render(app) draws it all from app.
 import { GROUP_COLORS } from './scene.js';
 
 export const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -23,6 +23,7 @@ export function describe(app, e) {
     case 'salary': return w + ' touche ' + e.amount + ' au Départ';
     case 'bonus': return w + ' tombe pile sur le Départ : ' + (e.by === 'roll' ? 'un lancer de plus 🎲' : 'construction sur la rue de son choix 🏗');
     case 'moved': return w + ' arrive sur ' + s;
+    case 'flew': return w + ' prend l\'avion pour ' + s + ' (' + e.amount + ') ✈️';
     case 'jailed': return w + ' est emmené au poste 🚓';
     case 'freed': return w + ' sort du poste' + (e.amount ? ' (' + e.amount + ')' : '');
     case 'rent': return w + ' doit ' + e.amount + ' de loyer à ' + t;
@@ -33,13 +34,7 @@ export function describe(app, e) {
     case 'bought': return w + ' achète ' + s + ' (' + e.amount + ')';
     case 'declined': return w + ' n\'achète pas ' + s;
     case 'built': return w + ' construit sur ' + s;
-    case 'sold': return w + ' revend un niveau sur ' + s;
-    case 'mortgaged': return w + ' hypothèque ' + s;
-    case 'unmortgaged': return w + ' lève l\'hypothèque de ' + s;
-    case 'offer': return w + ' propose un échange à ' + t;
-    case 'traded': return w + ' accepte l\'échange de ' + t;
-    case 'rejected': return w + ' refuse l\'échange de ' + t;
-    case 'cancelled': return w + ' retire son offre';
+    case 'resold': return w + ' revend ' + s + ' à la banque (' + e.amount + ')';
     case 'bankrupt': return w + ' fait faillite 💥';
     case 'over': return '🏆 ' + w + ' gagne la partie' + (e.by ? ' : ' + WIN_BY[e.by] : '') + ' !';
   }
@@ -75,7 +70,6 @@ export function render(app) {
     $('actions').innerHTML = actions(app);
     $('deed').innerHTML = deed(app);
     $('deed').hidden = app.selected < 0;
-    $('trades').innerHTML = trades(app);
     renderLog(app);
   }
   // the window is drawn again only when what it shows changed: its animations and the button
@@ -232,7 +226,7 @@ const deedColor = s => s.kind === 'street' ? GROUP_COLORS[s.group] : '#2b2d42';
 
 function players(app) {
   const { nm, colorOf, person } = names(app), g = app.game, b = app.board;
-  const props = id => g.deeds.filter(d => d.owner === id).sort((x, y) => x.square - y.square).map(d => `<button class="prop ${d.mortgaged ? 'mort' : ''} ${d.square === app.selected ? 'on' : ''}"
+  const props = id => g.deeds.filter(d => d.owner === id).sort((x, y) => x.square - y.square).map(d => `<button class="prop ${d.square === app.selected ? 'on' : ''}"
     style="--c:${deedColor(b.squares[d.square])}" data-do="pick" data-sq="${d.square}" title="${esc(b.squares[d.square].name)}"></button>`).join('');
   return g.players.map(p => `<div class="glass pc ${p.id === g.turn && g.phase !== 'over' ? 'turn' : ''} ${p.bankrupt ? 'out' : ''} ${p.id === app.me ? 'me' : ''}">
     <i class="token" style="--c:${colorOf(p.id)}"></i>
@@ -294,10 +288,13 @@ function actions(app) {
       if (mine) {
         const again = g.doubles > 0 && !me.inJail;
         const info = again ? '<b>Double !</b> Tu relances les dés.' + (g.doubles === 2 ? ' <span class="warn">Encore un double et c\'est le poste de police.</span>' : '') :
-          me.inJail ? 'Au poste : fais un double pour sortir, ou paie.' : '';
+          me.inJail ? 'Au poste : fais un double pour sortir, ou paie.' :
+          g.fly && me.cash < b.flightCost ? `✈️ <b>Aéroport</b> : il te faut ${fmt(b.flightCost)} pour t'envoler. Lance les dés.` :
+          g.fly ? `✈️ <b>Aéroport</b> : clique une case du plateau pour t'y envoler (${fmt(b.flightCost)}, sans passer par le Départ), ou lance les dés.` : '';
         return box([info, buildInfo()].filter(Boolean).join(' '), build() + btn('roll', again ? '🎲 Relancer les dés' : '🎲 Lancer les dés', 'main') + (me.inJail ? btn('payjail', 'Payer ' + b.jailFine) + (me.jailCards ? btn('jailcard', '🃏 Carte') : '') : ''), 'mine');
       }
       if (g.doubles > 0) return box(`<b>${esc(nm(g.turn))}</b> a fait un double et relance les dés.`);
+      if (g.fly) return box(`✈️ <b>${esc(nm(g.turn))}</b> est à l'aéroport et peut s'envoler vers la case de son choix.`);
       break;
     case 'buy': if (mine) {
       const s = b.squares[me.pos];
@@ -306,8 +303,12 @@ function actions(app) {
       return box(`<b>${esc(s.name)}</b> : le terrain, ou avec des maisons ?${later}`, levelButtons(b, me, me.pos, 'buy', 0, s.price) + btn('decline', 'Ne pas acheter'), 'mine');
     } break;
     case 'debt': if (mine) {
-      return box(`Tu dois <b>${fmt(g.debt.amount)}</b> à ${esc(nm(g.debt.to))} : vends ou hypothèque (clique tes propriétés), puis`,
-        btn('pay', 'Payer', 'main') + btn('bankrupt', 'Faillite', 'danger'), 'mine');
+      // short of cash: selling is the way; with the cash, paying
+      if (me.cash < g.debt.amount) {
+        return box(`Tu dois <b>${fmt(g.debt.amount)}</b> à ${esc(nm(g.debt.to))} : il te manque <b>${fmt(g.debt.amount - me.cash)}</b>.`,
+          '<button class="btn big main" data-do="openSale">🏷 Vendre</button>' + btn('bankrupt', 'Faillite', 'danger'), 'mine');
+      }
+      return box(`Tu dois <b>${fmt(g.debt.amount)}</b> à ${esc(nm(g.debt.to))}.`, btn('pay', 'Payer', 'main'), 'mine');
     } break;
     case 'end': if (mine) return box(buildInfo(), build() + btn('end', 'Fin du tour ➜', build() ? '' : 'main'), 'mine');
   }
@@ -329,59 +330,62 @@ function deed(app) {
   } else if (s.kind === 'utility') {
     rows = b.utilityFactor.map((v, i) => `<tr><td>${i + 1} compagnie${i ? 's' : ''}</td><td>dés × ${v}</td></tr>`).join('');
   } else if (s.kind === 'tax') rows = `<tr><td>À payer</td><td>${s.tax}</td></tr>`;
-  if (s.price) rows += `<tr class="sub"><td>Hypothèque</td><td>${s.price / 2}</td></tr>`;
   let acts = '';
   const me = g.players.find(p => p.id === app.me);
+  // at the airport, at the start of my turn: fly to this square instead of rolling
+  if (g.fly && g.phase === 'roll' && g.turn === app.me && me && me.pos !== app.selected && s.kind !== 'start') {
+    acts += `<button class="btn small main" data-do="act" data-a="fly" data-sq="${app.selected}" ${me.cash < b.flightCost ? 'disabled' : ''}>✈️ M'envoler ici ${money(b.flightCost)}</button>`;
+  }
   if (d && d.owner === app.me && me && !me.bankrupt && g.phase !== 'over') {
-    const a = (x, l) => `<button class="btn small" data-do="act" data-a="${x}" data-sq="${app.selected}">${l}</button>`;
     // landed right on the start and drew building: any street of mine, from its card
-    if (s.kind === 'street' && !d.mortgaged && g.buildAnywhere && g.turn === app.me && (g.phase === 'roll' || g.phase === 'end')) {
+    if (s.kind === 'street' && g.buildAnywhere && g.turn === app.me && (g.phase === 'roll' || g.phase === 'end')) {
       acts += levelButtons(b, me, app.selected, 'build', d.level, 0, 'small');
     }
-    if (s.kind === 'street' && d.level > 0) acts += a('sell', 'Revendre un niveau');
-    acts += d.mortgaged ? a('unmortgage', 'Lever l\'hypothèque') : a('mortgage', 'Hypothéquer');
   }
   return `<div class="glass deedcard">
     <div class="deedhead" style="--c:${head}"><b>${esc(s.name)}</b>${s.price ? money(s.price) : ''}<button class="x" data-do="unselect">✕</button></div>
-    <div class="owner">${d ? `<i class="token" style="--c:${colorOf(d.owner)}"></i> ${esc(nm(d.owner))}${d.mortgaged ? ' · <b>hypothéquée</b>' : ''}` : s.price ? '<span class="muted">À vendre</span>' : ''}</div>
+    <div class="owner">${d ? `<i class="token" style="--c:${colorOf(d.owner)}"></i> ${esc(nm(d.owner))}` : s.price ? '<span class="muted">À vendre</span>' : ''}</div>
     ${acts ? '<div class="acts">' + acts + '</div>' : ''}
     ${rows ? '<table>' + rows + '</table>' : ''}
   </div>`;
 }
 
-function trades(app) {
+// what the player who owes can sell back to the bank, to pay: their properties with what each
+// brings, the selection against what is missing
+export function saleModal(app) {
   const { nm } = names(app), g = app.game, b = app.board;
   const me = g.players.find(p => p.id === app.me);
-  if (!me || me.bankrupt || g.phase === 'over') return '';
-  const side = (sq, cash) => [...sq.map(i => esc(b.squares[i].name)), cash ? money(cash) : ''].filter(Boolean).join(', ') || 'rien';
-  const list = g.trades.filter(t => t.from === app.me || t.to === app.me).map(t => `<div class="trade ${t.to === app.me ? 'forme' : ''}">
-    <div><b>${esc(nm(t.from))}</b> donne ${side(t.give, t.giveCash)}</div>
-    <div>contre ${side(t.get, t.getCash)} de <b>${esc(nm(t.to))}</b></div>
-    <div class="acts">${t.to === app.me
-      ? `<button class="btn small main" data-do="act" data-a="accept" data-trade="${t.id}">Accepter</button><button class="btn small" data-do="act" data-a="reject" data-trade="${t.id}">Refuser</button>`
-      : `<button class="btn small" data-do="act" data-a="cancel" data-trade="${t.id}">Retirer</button>`}</div></div>`).join('');
-  return `<div class="glass trades"><div class="row"><b class="grow">Échanges</b><button class="btn small" data-do="openTrade">🤝 Proposer</button></div>${list}</div>`;
-}
-
-// the trade editor, in the modal
-export function tradeModal(app) {
-  const { nm, colorOf } = names(app), g = app.game, b = app.board, t = app.trade;
-  const others = g.players.filter(o => o.id !== app.me && !o.bankrupt);
-  if (!others.some(o => o.id === t.to)) Object.assign(t, { to: others[0]?.id || 0, get: [] });
-  const me = g.players.find(p => p.id === app.me), them = g.players.find(p => p.id === t.to);
-  const boxes = (owner, key) => g.deeds.filter(d => d.owner === owner).map(d => {
-    const s = b.squares[d.square];
-    return `<label class="chip ${t[key].includes(d.square) ? 'on' : ''}" style="--c:${s.group ? GROUP_COLORS[s.group] : '#2b2d42'}">
-      <input type="checkbox" data-trade-sq="${key}" value="${d.square}" ${t[key].includes(d.square) ? 'checked' : ''}>${esc(s.name)}</label>`;
-  }).join('') || '<span class="muted">aucune propriété</span>';
-  return `<div class="card modalbox trade-editor">
-    <h2>Proposer un échange</h2>
-    <div class="row">avec ${others.map(o => `<button class="btn small ${o.id === t.to ? 'main' : ''}" data-do="tradeTo" data-id="${o.id}"><i class="token" style="--c:${colorOf(o.id)}"></i> ${esc(nm(o.id))}</button>`).join('')}</div>
-    <div class="cols">
-      <section><h3>Je donne</h3>${boxes(app.me, 'give')}<label class="cash">+ <input id="trade-giveCash" class="field" type="number" min="0" max="${me.cash}" data-bind="giveCash" value="${t.giveCash}"> ${money(me.cash)} dispo</label></section>
-      <section><h3>Je reçois</h3>${them ? boxes(t.to, 'get') : ''}<label class="cash">+ <input id="trade-getCash" class="field" type="number" min="0" data-bind="getCash" value="${t.getCash}"> ${them ? money(them.cash) : ''} chez lui</label></section>
+  if (g.phase !== 'debt' || !g.debt || g.debt.who !== app.me || !me) return '';
+  const mine = g.deeds.filter(d => d.owner === app.me).sort((x, y) => x.square - y.square);
+  const picked = mine.filter(d => app.sale.includes(d.square));
+  const gain = picked.reduce((n, d) => n + d.resale, 0), all = mine.reduce((n, d) => n + d.resale, 0);
+  const need = Math.max(0, g.debt.amount - me.cash), after = me.cash + gain - g.debt.amount;
+  const levels = l => l === b.maxLevel ? '🏢' : '🏠'.repeat(l);
+  const row = d => {
+    const s = b.squares[d.square], on = app.sale.includes(d.square);
+    const color = s.kind === 'street' ? GROUP_COLORS[s.group] : '#2b2d42';
+    return `<label class="chip salerow ${on ? 'on' : ''}" style="--c:${color}">
+      <input type="checkbox" data-sale-sq value="${d.square}" ${on ? 'checked' : ''}><i class="tick">${on ? '✓' : ''}</i>
+      <span class="nm">${esc(s.name)}</span>${d.level ? `<span class="lv">${levels(d.level)}</span>` : ''}${money(d.resale)}</label>`;
+  };
+  const pct = g.debt.amount ? Math.min(100, Math.round(100 * (me.cash + gain) / g.debt.amount)) : 100;
+  const short = me.cash + all < g.debt.amount; // selling everything would not be enough
+  const status = after >= 0 ? `Dette couverte : il te restera ${money(after)}.` :
+    `Il manque encore <b>${fmt(-after)}</b>.` + (short ? ' <span class="warn">Même en vendant tout, ce n\'est pas assez.</span>' : '');
+  const sell = !picked.length ? '<button class="btn big main" disabled>Vendre</button>' :
+    `<button class="btn big main" data-do="sell">${after >= 0 ? 'Vendre et payer' : 'Vendre'} (+${fmt(gain)})</button>`;
+  return `<div class="card modalbox sale">
+    <h2>Vendre pour payer</h2>
+    <p class="owe">Tu dois <b>${fmt(g.debt.amount)}</b> à <b>${esc(nm(g.debt.to))}</b>. Tu as ${money(me.cash)}${need ? `, il te manque <b>${fmt(need)}</b>` : ''}.</p>
+    <p class="muted hint">Une propriété vendue retourne à la banque pour ${b.resaleRate} % de ce qu'elle a coûté, maisons et tour comprises, et redevient libre.</p>
+    <div class="salelist">${mine.map(row).join('') || '<span class="muted">Tu n\'as aucune propriété.</span>'}</div>
+    <div class="saletotal">
+      <div class="row"><span class="grow">Sélection</span>${money(gain)}</div>
+      <div class="gauge ${after >= 0 ? 'ok' : ''}"><i style="width:${pct}%"></i></div>
+      <div class="status">${status}</div>
     </div>
-    <div class="bar"><button class="btn" data-do="closeModal">Annuler</button><button class="btn big main" data-do="offer">Envoyer l'offre</button></div>
+    <div class="bar"><button class="btn" data-do="closeModal">Plus tard</button>
+      ${short ? '<button class="btn danger" data-do="act" data-a="bankrupt">Faillite</button>' : ''}${sell}</div>
   </div>`;
 }
 
@@ -417,9 +421,10 @@ export function rulesModal(app) {
       <li><b>Au poste</b>, pour sortir : fais un double, paie ${b.jailFine} ou joue une carte. Après ${b.jailTurns} essais, l'amende est due.</li>
       <li><b>Maisons</b> : en achetant une rue, prends-la nue ou avec 1 ou 2 maisons (3 après ton premier passage au Départ). Ensuite, chaque fois que tu retombes sur ta rue, ajoute des maisons, sans avoir besoin de tout le groupe. La tour se construit sur une rue à 3 maisons, en y retombant.</li>
       <li><b>Loyers</b> : quand tu as tout un groupe de couleur, ses rues sans maison rapportent le double, ses rues bâties une fois et demie.</li>
+      <li><b>L'Aéroport</b> : en t'y arrêtant, au tour suivant, au lieu de lancer les dés, envole-toi vers la case de ton choix pour ${b.flightCost}. Un vol ne passe pas par le Départ : pas de salaire, et le Départ n'est pas une destination.</li>
       <li><b>Le Départ</b> rapporte ${s ? s.salary : 'un salaire'} à chaque passage. En tombant pile dessus, pile ou face : un lancer de plus, ou construire sur la rue de ton choix (comme si tu y retombais).</li>
-      <li><b>Une dette</b> : vends, hypothèque ou échange pour payer, sinon c'est la faillite.</li>
-      <li><b>Échanges</b> : propriétés et argent, à tout moment, avec n'importe qui.</li>
+      <li><b>Fin du tour</b> : automatique quand il n'y a plus rien à faire. Si tu peux encore construire, termine-le toi-même.</li>
+      <li><b>Une dette</b> : s'il te manque de l'argent, revends des propriétés à la banque, pour ${b.resaleRate} % de ce qu'elles ont coûté, maisons et tour comprises. Sinon, c'est la faillite. On ne vend rien hors d'une dette.</li>
       <li><b>Minuteur</b> : si tu tardes, le jeu joue à ta place.</li>
       <li><b>Fin</b> : ${end}.</li>
       ${wins.length ? `<li><b>Victoire immédiate</b> : ${wins.join(', ou ')}.</li>` : ''}
