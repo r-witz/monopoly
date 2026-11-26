@@ -222,7 +222,7 @@ body.animating #actions .btn[data-do=act], body.waiting #actions .btn[data-do=ac
 #banner.show { animation: banner 1.4s ease-out; }
 @keyframes banner { 0% { opacity: 0; transform: scale(.6); } 15% { opacity: 1; transform: scale(1.08); } 25% { transform: scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-20px); } }
 #card { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(29, 42, 58, .25); cursor: pointer; }
-.cardface { width: 320px; background: var(--cream); border: 4px solid var(--ink); border-radius: 20px; box-shadow: 0 8px 0 var(--ink); text-align: center;
+.cardface { width: 320px; background: var(--paper); border: 4px solid var(--ink); border-radius: 20px; box-shadow: 0 8px 0 var(--ink); text-align: center;
   overflow: hidden; animation: flip .45s ease-out; }
 .cardhead { background: #8b5cf6; color: #fff; font: 700 24px 'DynaPuff', system-ui; padding: 12px; border-bottom: 4px solid var(--ink); }
 .cardface p { font-size: 20px; padding: 18px 22px 6px; margin: 0; }
