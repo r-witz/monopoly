@@ -48,15 +48,18 @@ func (g *Game) flyTo(p, sq int) error {
 		return ErrNotYours
 	case g.Phase != PhaseRoll || !g.fly:
 		return ErrPhase
-	case sq < 0 || sq >= len(g.Board.Squares) || sq == g.Players[p].Pos:
+	case sq < 0 || sq >= len(g.Board.Squares) || sq == g.Players[p].Pos || g.Board.Squares[sq].Kind == KindStart:
 		return ErrInvalid
 	case g.Players[p].Cash < g.Board.FlightCost:
 		return ErrCash
 	}
-	g.fly, g.again = false, false
+	pl := g.Players[p]
+	g.fly, g.here, g.anywhere = false, -1, false
 	g.transfer(p, -1, g.Board.FlightCost)
-	g.emit(Event{Kind: "flew", Who: g.id(p), Square: sq, Amount: g.Board.FlightCost})
-	g.forward(p, sq)
+	g.emit(Event{Kind: "flew", Who: pl.ID, Square: sq, Amount: g.Board.FlightCost})
+	pl.Pos = sq // over the board: no salary, no lap
+	g.emit(Event{Kind: "moved", Who: pl.ID, Square: sq})
+	g.land(p)
 	return nil
 }
 

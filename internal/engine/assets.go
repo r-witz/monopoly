@@ -108,32 +108,47 @@ func (g *Game) resellSquare(p, sq int) {
 	g.emit(Event{Kind: "resold", Who: g.id(p), Square: sq, Amount: v})
 }
 
-// liquidate resells p's properties until p has amount in cash or none is left: the cheapest one
-// that covers what is missing, else the most valuable one, and again. What the timer does for a
-// player in debt.
+// liquidate resells the properties of p whose resales add up to the least that covers what p is
+// missing to have amount in cash: as little as possible goes, the most valuable properties stay.
+// All of them when even that is not enough. What the timer does for a player in debt.
 func (g *Game) liquidate(p, amount int) {
-	for g.Players[p].Cash < amount {
-		missing, cover, top := amount-g.Players[p].Cash, -1, -1
-		for sq, d := range g.Deeds {
-			if d.Owner != p {
-				continue
-			}
-			v := g.Resale(sq)
-			if v >= missing && (cover < 0 || v < g.Resale(cover)) {
-				cover = sq
-			}
-			if top < 0 || v > g.Resale(top) {
-				top = sq
+	missing := amount - g.Players[p].Cash
+	if missing <= 0 {
+		return
+	}
+	var squares, values []int
+	total := 0
+	for sq, d := range g.Deeds {
+		if d.Owner == p {
+			squares, values = append(squares, sq), append(values, g.Resale(sq))
+			total += values[len(values)-1]
+		}
+	}
+	if total <= missing {
+		for _, sq := range squares {
+			g.resellSquare(p, sq)
+		}
+		return
+	}
+	// by[s]: 1 + the index of the property that first made a sale of exactly s, 0 for none yet
+	// (by[0]: the empty sale). The properties before it make s minus its value.
+	by := make([]int, total+1)
+	by[0] = -1
+	for i, v := range values {
+		for s := total; s >= v; s-- {
+			if by[s] == 0 && by[s-v] != 0 {
+				by[s] = i + 1
 			}
 		}
-		switch {
-		case cover >= 0:
-			g.resellSquare(p, cover)
-		case top >= 0:
-			g.resellSquare(p, top)
-		default:
-			return
-		}
+	}
+	s := missing
+	for by[s] == 0 { // total itself is a sale: the search ends
+		s++
+	}
+	for s > 0 {
+		i := by[s] - 1
+		g.resellSquare(p, squares[i])
+		s -= values[i]
 	}
 }
 

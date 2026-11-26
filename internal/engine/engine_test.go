@@ -391,6 +391,24 @@ func TestDebtTimeoutResellsThenPays(t *testing.T) {
 	invariants(t, g)
 }
 
+// The timer resells as little as covers the debt: two small properties rather than one that
+// covers it alone, the most valuable kept.
+func TestDebtTimeoutKeepsTheBest(t *testing.T) {
+	g := newGame(2, testRules, 1)
+	give(g, 0, 1, 3, 39)
+	g.Deeds[39].Level, g.Players[0].Lapped = g.Board.MaxLevel, true
+	g.transfer(0, -1, 1500)
+	if g.Resale(1) != 60 || g.Resale(3) != 60 || g.Resale(39) != 1500 {
+		t.Fatalf("resales %d %d %d", g.Resale(1), g.Resale(3), g.Resale(39))
+	}
+	g.charge(0, 100, 1, g.settle)
+	g.Timeout()
+	if g.Deeds[1].Owner != -1 || g.Deeds[3].Owner != -1 || g.Deeds[39].Owner != 0 || g.Players[0].Cash != 20 {
+		t.Fatalf("owners %d %d %d, cash %d", g.Deeds[1].Owner, g.Deeds[3].Owner, g.Deeds[39].Owner, g.Players[0].Cash)
+	}
+	invariants(t, g)
+}
+
 // Going bankrupt: the buildings back to the bank for what they cost, everything to the creditor.
 func TestBankruptToCreditor(t *testing.T) {
 	g := newGame(3, testRules, 1)
@@ -787,12 +805,15 @@ func TestAirport(t *testing.T) {
 	}
 	invariants(t, g)
 
-	// passing the start: the salary
+	// over the start: no salary, no lap; the start itself is no destination
 	g = newGame(2, testRules, 1)
 	g.Players[0].Pos, g.fly = airport, true
+	if _, err := g.Apply(0, Action{Kind: "fly", Square: 0}); err != ErrInvalid {
+		t.Fatalf("flew to the start: %v", err)
+	}
 	ev = must(t, g, 0, Action{Kind: "fly", Square: 5})
-	if !has(ev, "salary") || g.Players[0].Cash != 1500-cost+200 || g.Phase != PhaseBuy {
-		t.Fatalf("cash %d phase %s", g.Players[0].Cash, g.Phase)
+	if has(ev, "salary") || g.Players[0].Lapped || g.Players[0].Cash != 1500-cost || g.Phase != PhaseBuy {
+		t.Fatalf("cash %d lapped %v phase %s", g.Players[0].Cash, g.Players[0].Lapped, g.Phase)
 	}
 
 	// to the police: jailed

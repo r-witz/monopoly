@@ -104,8 +104,9 @@ arrête et exclut, anti-flood, écriture non bloquante. Le protocole est décrit
   passage, sans avoir besoin du groupe complet. La tour se construit sur une rue à 3 maisons, en y
   retombant. Une rue bâtie ne s'échange pas. Il n'y a pas d'hypothèque.
 - **Aéroport** (le coin opposé au Départ) : en s'y arrêtant, au tour suivant, au lieu de lancer
-  les dés, on peut s'envoler vers la case de son choix pour 50. On y joue comme si on y était
-  arrivé aux dés, et passer par le Départ rapporte le salaire. Lancer les dés renonce au vol.
+  les dés, on peut s'envoler vers la case de son choix pour 50, sauf le Départ. On y joue comme si
+  on y était arrivé aux dés. Un vol ne passe pas par le Départ : ni salaire, ni tour du plateau.
+  Lancer les dés renonce au vol.
 - **Départ pile** : en tombant pile sur le Départ (aux dés ou par une carte), pile ou face : un
   lancer de plus (après un éventuel double), ou construire sur la rue de son choix, comme si on y
   retombait.
@@ -125,8 +126,8 @@ arrête et exclut, anti-flood, écriture non bloquante. Le protocole est décrit
 - **Échanges** : propriétés et argent dans les deux sens, à tout moment. Une offre est revérifiée
   à l'acceptation, et un nouvel envoi remplace l'offre précédente du même joueur.
 - **Minuteur** : si le joueur ne décide pas à temps, le serveur joue à sa place. Il lance les dés,
-  refuse l'achat, revend des propriétés pour payer une dette (la moins chère qui suffit, sinon la
-  plus chère, et ainsi de suite ; ou déclare la faillite), puis finit le tour. Une partie ne bloque donc jamais.
+  refuse l'achat, revend des propriétés pour payer une dette (celles dont le total couvre la
+  dette au plus juste, pour garder les plus belles ; ou déclare la faillite), puis finit le tour. Une partie ne bloque donc jamais.
 
 Choix faits pour la salle :
 

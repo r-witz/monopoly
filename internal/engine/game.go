@@ -171,8 +171,8 @@ func (g *Game) seat(id uint32) int {
 //
 //	roll                     the current player, PhaseRoll
 //	fly (square)             instead of the turn's first roll, the turn having begun at the airport: pay
-//	                         Board.FlightCost and go forward to any other square (the salary when passing
-//	                         the start), played as if landed there by the dice
+//	                         Board.FlightCost and fly to any other square but the start, played as if
+//	                         landed there by the dice. Over the board: no salary, no lap
 //	payjail, jailcard        leave the police station before rolling: pay the fine, or use a card
 //	buy (level), decline     PhaseBuy: the square the current player is on, a street with level houses (0 to 2, 3 once
 //	                         the player has passed the start, never the tower); declined, it stays free

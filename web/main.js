@@ -258,8 +258,7 @@ const handlers = {
     const picked = g.deeds.filter(d => d.owner === app.me && app.sale.includes(d.square));
     if (!picked.length || !g.debt) return;
     act('resell', { squares: picked.map(d => d.square) }); // paid with it, when that covers the debt
-    app.sale = [];
-    app.modal = null;
+    app.sale = []; // the window stays open: play() closes it once the debt is gone
     hud.render(app);
   },
   closeModal() { app.modal = null; hud.render(app); },

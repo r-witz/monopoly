@@ -195,7 +195,7 @@ function squareDetail() {
   if (s.kind === 'utility') info = 'Loyer : dés × ' + board.utilityFactor.join(' (ou ×') + ' avec les deux).';
   if (s.kind === 'tax') info = 'À payer : ' + s.tax + '.';
   let actions = '';
-  if (game.fly && game.phase === 'roll' && game.turn === me && mine().pos !== selected) {
+  if (game.fly && game.phase === 'roll' && game.turn === me && mine().pos !== selected && s.kind !== 'start') {
     actions += `<button data-do="act" data-a="fly" data-sq="${selected}">S'envoler ici (${board.flightCost})</button>`;
   }
   if (d && d.owner === me && game.phase === 'debt' && game.turn === me && mine().cash < game.debt.amount) {
