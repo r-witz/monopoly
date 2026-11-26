@@ -62,8 +62,8 @@ type Trade struct {
 	Offer
 }
 
-// check says whether t can be done now. Squares change hands with no building in their group;
-// a mortgaged one stays mortgaged. A player who owes money gives none.
+// check says whether t can be done now. Squares change hands with no building on them. A player
+// who owes money gives none.
 func (g *Game) check(t *Trade) error {
 	from, to := g.Players[t.From], g.Players[t.To]
 	switch {

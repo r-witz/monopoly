@@ -249,11 +249,10 @@ const handlers = {
   },
   openSale() { app.sale = []; app.modal = hud.saleModal; hud.render(app); },
   sell() {
-    const g = app.game, me = g.players.find(p => p.id === app.me);
-    const picked = g.deeds.filter(d => d.owner === app.me && !d.mortgaged && app.sale.includes(d.square));
+    const g = app.game;
+    const picked = g.deeds.filter(d => d.owner === app.me && app.sale.includes(d.square));
     if (!picked.length || !g.debt) return;
-    act('resell', { squares: picked.map(d => d.square) });
-    if (me.cash + picked.reduce((n, d) => n + d.resale, 0) >= g.debt.amount) act('pay');
+    act('resell', { squares: picked.map(d => d.square) }); // paid with it, when that covers the debt
     app.sale = [];
     app.modal = null;
     hud.render(app);

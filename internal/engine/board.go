@@ -24,8 +24,8 @@ type Square struct {
 	Group     int    `json:"group,omitempty"`     // streets: 1 to 8, the set to own whole for double rent and instant wins
 	Price     int    `json:"price,omitempty"`     // streets, transit, utilities
 	Rent      []int  `json:"rent,omitempty"`      // streets: by level, 0 (bare) to MaxLevel
-	BuildCost int    `json:"buildCost,omitempty"` // streets: one house; sold back for half
-	TowerCost int    `json:"towerCost,omitempty"` // streets: the tower, on top of the houses; sold back for half
+	BuildCost int    `json:"buildCost,omitempty"` // streets: one house
+	TowerCost int    `json:"towerCost,omitempty"` // streets: the tower, on top of the houses
 	Tax       int    `json:"tax,omitempty"`
 }
 
@@ -68,15 +68,6 @@ type Board struct {
 	MaxLevel      int      `json:"maxLevel"`      // levels 1 to MaxLevel-1 are houses, MaxLevel a tower
 	TransitRent   []int    `json:"transitRent"`   // by lines owned, 1 to 4
 	UtilityFactor []int    `json:"utilityFactor"` // times the dice, by utilities owned, 1 to 2
-	MortgageRate  int      `json:"mortgageRate"`  // percent of the mortgage paid back on top of it to lift it
-}
-
-// mortgage is what mortgaging a square gives; lifting it costs that plus MortgageRate percent.
-func (b *Board) mortgage(sq int) int { return b.Squares[sq].Price / 2 }
-
-func (b *Board) unmortgage(sq int) int {
-	m := b.mortgage(sq)
-	return m + (m*b.MortgageRate+99)/100
 }
 
 // levelCost is what building level (1 to MaxLevel) of street sq costs: a house, or the tower.
@@ -184,5 +175,4 @@ var Classic = &Board{
 	MaxLevel:      4,
 	TransitRent:   []int{25, 50, 100, 200},
 	UtilityFactor: []int{4, 10},
-	MortgageRate:  10,
 }

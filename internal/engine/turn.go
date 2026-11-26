@@ -133,11 +133,9 @@ func (g *Game) land(p int) {
 		case d.Owner < 0:
 			g.setPhase(PhaseBuy)
 		case d.Owner == p:
-			if sq.Kind == KindStreet && !d.Mortgaged && g.reach(p, d.Level) > d.Level {
+			if sq.Kind == KindStreet && g.reach(p, d.Level) > d.Level {
 				g.here = pl.Pos
 			}
-			g.settle()
-		case d.Mortgaged:
 			g.settle()
 		default:
 			rent := g.rent(pl.Pos)
@@ -192,7 +190,7 @@ func (g *Game) settle() {
 	}
 }
 
-// rent is what landing on square sq costs, owned by someone else and not mortgaged. A street
+// rent is what landing on square sq costs, owned by someone else. A street
 // of a group owned whole: twice its bare rent, or 1.5 times its rent with buildings (rounded,
 // half up).
 func (g *Game) rent(sq int) int {

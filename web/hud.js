@@ -33,10 +33,7 @@ export function describe(app, e) {
     case 'bought': return w + ' achète ' + s + ' (' + e.amount + ')';
     case 'declined': return w + ' n\'achète pas ' + s;
     case 'built': return w + ' construit sur ' + s;
-    case 'sold': return w + ' revend un niveau sur ' + s;
     case 'resold': return w + ' revend ' + s + ' à la banque (' + e.amount + ')';
-    case 'mortgaged': return w + ' hypothèque ' + s;
-    case 'unmortgaged': return w + ' lève l\'hypothèque de ' + s;
     case 'offer': return w + ' propose un échange à ' + t;
     case 'traded': return w + ' accepte l\'échange de ' + t;
     case 'rejected': return w + ' refuse l\'échange de ' + t;
@@ -233,7 +230,7 @@ const deedColor = s => s.kind === 'street' ? GROUP_COLORS[s.group] : '#2b2d42';
 
 function players(app) {
   const { nm, colorOf, person } = names(app), g = app.game, b = app.board;
-  const props = id => g.deeds.filter(d => d.owner === id).sort((x, y) => x.square - y.square).map(d => `<button class="prop ${d.mortgaged ? 'mort' : ''} ${d.square === app.selected ? 'on' : ''}"
+  const props = id => g.deeds.filter(d => d.owner === id).sort((x, y) => x.square - y.square).map(d => `<button class="prop ${d.square === app.selected ? 'on' : ''}"
     style="--c:${deedColor(b.squares[d.square])}" data-do="pick" data-sq="${d.square}" title="${esc(b.squares[d.square].name)}"></button>`).join('');
   return g.players.map(p => `<div class="glass pc ${p.id === g.turn && g.phase !== 'over' ? 'turn' : ''} ${p.bankrupt ? 'out' : ''} ${p.id === app.me ? 'me' : ''}">
     <i class="token" style="--c:${colorOf(p.id)}"></i>
@@ -307,9 +304,12 @@ function actions(app) {
       return box(`<b>${esc(s.name)}</b> : le terrain, ou avec des maisons ?${later}`, levelButtons(b, me, me.pos, 'buy', 0, s.price) + btn('decline', 'Ne pas acheter'), 'mine');
     } break;
     case 'debt': if (mine) {
-      const short = me.cash < g.debt.amount;
-      return box(`Tu dois <b>${fmt(g.debt.amount)}</b> à ${esc(nm(g.debt.to))}` + (short ? ` : il te manque <b>${fmt(g.debt.amount - me.cash)}</b>.` : '.'),
-        `<button class="btn big ${short ? 'main' : ''}" data-do="openSale">🏷 Vendre</button>` + btn('pay', 'Payer', short ? '' : 'main') + btn('bankrupt', 'Faillite', 'danger'), 'mine');
+      // short of cash: selling is the way (or trading); with the cash, by a trade, paying
+      if (me.cash < g.debt.amount) {
+        return box(`Tu dois <b>${fmt(g.debt.amount)}</b> à ${esc(nm(g.debt.to))} : il te manque <b>${fmt(g.debt.amount - me.cash)}</b>.`,
+          '<button class="btn big main" data-do="openSale">🏷 Vendre</button>' + btn('bankrupt', 'Faillite', 'danger'), 'mine');
+      }
+      return box(`Tu dois <b>${fmt(g.debt.amount)}</b> à ${esc(nm(g.debt.to))}.`, btn('pay', 'Payer', 'main'), 'mine');
     } break;
     case 'end': if (mine) return box(buildInfo(), build() + btn('end', 'Fin du tour ➜', build() ? '' : 'main'), 'mine');
   }
@@ -331,21 +331,17 @@ function deed(app) {
   } else if (s.kind === 'utility') {
     rows = b.utilityFactor.map((v, i) => `<tr><td>${i + 1} compagnie${i ? 's' : ''}</td><td>dés × ${v}</td></tr>`).join('');
   } else if (s.kind === 'tax') rows = `<tr><td>À payer</td><td>${s.tax}</td></tr>`;
-  if (s.price) rows += `<tr class="sub"><td>Hypothèque</td><td>${s.price / 2}</td></tr>`;
   let acts = '';
   const me = g.players.find(p => p.id === app.me);
   if (d && d.owner === app.me && me && !me.bankrupt && g.phase !== 'over') {
-    const a = (x, l) => `<button class="btn small" data-do="act" data-a="${x}" data-sq="${app.selected}">${l}</button>`;
     // landed right on the start and drew building: any street of mine, from its card
-    if (s.kind === 'street' && !d.mortgaged && g.buildAnywhere && g.turn === app.me && (g.phase === 'roll' || g.phase === 'end')) {
+    if (s.kind === 'street' && g.buildAnywhere && g.turn === app.me && (g.phase === 'roll' || g.phase === 'end')) {
       acts += levelButtons(b, me, app.selected, 'build', d.level, 0, 'small');
     }
-    if (s.kind === 'street' && d.level > 0) acts += a('sell', 'Revendre un niveau');
-    acts += d.mortgaged ? a('unmortgage', 'Lever l\'hypothèque') : a('mortgage', 'Hypothéquer');
   }
   return `<div class="glass deedcard">
     <div class="deedhead" style="--c:${head}"><b>${esc(s.name)}</b>${s.price ? money(s.price) : ''}<button class="x" data-do="unselect">✕</button></div>
-    <div class="owner">${d ? `<i class="token" style="--c:${colorOf(d.owner)}"></i> ${esc(nm(d.owner))}${d.mortgaged ? ' · <b>hypothéquée</b>' : ''}` : s.price ? '<span class="muted">À vendre</span>' : ''}</div>
+    <div class="owner">${d ? `<i class="token" style="--c:${colorOf(d.owner)}"></i> ${esc(nm(d.owner))}` : s.price ? '<span class="muted">À vendre</span>' : ''}</div>
     ${acts ? '<div class="acts">' + acts + '</div>' : ''}
     ${rows ? '<table>' + rows + '</table>' : ''}
   </div>`;
@@ -393,16 +389,14 @@ export function saleModal(app) {
   const { nm } = names(app), g = app.game, b = app.board;
   const me = g.players.find(p => p.id === app.me);
   if (g.phase !== 'debt' || !g.debt || g.debt.who !== app.me || !me) return '';
-  const mine = g.deeds.filter(d => d.owner === app.me);
-  const sellable = mine.filter(d => !d.mortgaged);
-  const picked = sellable.filter(d => app.sale.includes(d.square));
-  const gain = picked.reduce((n, d) => n + d.resale, 0), all = sellable.reduce((n, d) => n + d.resale, 0);
+  const mine = g.deeds.filter(d => d.owner === app.me).sort((x, y) => x.square - y.square);
+  const picked = mine.filter(d => app.sale.includes(d.square));
+  const gain = picked.reduce((n, d) => n + d.resale, 0), all = mine.reduce((n, d) => n + d.resale, 0);
   const need = Math.max(0, g.debt.amount - me.cash), after = me.cash + gain - g.debt.amount;
   const levels = l => l === b.maxLevel ? '🏢' : '🏠'.repeat(l);
   const row = d => {
     const s = b.squares[d.square], on = app.sale.includes(d.square);
     const color = s.kind === 'street' ? GROUP_COLORS[s.group] : '#2b2d42';
-    if (d.mortgaged) return `<div class="chip salerow off" style="--c:${color}"><span class="nm">${esc(s.name)}</span><span class="muted">hypothéquée</span></div>`;
     return `<label class="chip salerow ${on ? 'on' : ''}" style="--c:${color}">
       <input type="checkbox" data-sale-sq value="${d.square}" ${on ? 'checked' : ''}><i class="tick">${on ? '✓' : ''}</i>
       <span class="nm">${esc(s.name)}</span>${d.level ? `<span class="lv">${levels(d.level)}</span>` : ''}${money(d.resale)}</label>`;
@@ -416,7 +410,7 @@ export function saleModal(app) {
   return `<div class="card modalbox sale">
     <h2>Vendre pour payer</h2>
     <p class="owe">Tu dois <b>${fmt(g.debt.amount)}</b> à <b>${esc(nm(g.debt.to))}</b>. Tu as ${money(me.cash)}${need ? `, il te manque <b>${fmt(need)}</b>` : ''}.</p>
-    <p class="muted hint">Une propriété vendue retourne à la banque avec ses constructions, à moitié de ce qu'elles ont coûté, et redevient libre.</p>
+    <p class="muted hint">Une propriété vendue retourne à la banque au prix payé, maisons et tour comprises, et redevient libre.</p>
     <div class="salelist">${mine.map(row).join('') || '<span class="muted">Tu n\'as aucune propriété.</span>'}</div>
     <div class="saletotal">
       <div class="row"><span class="grow">Sélection</span>${money(gain)}</div>
@@ -462,7 +456,7 @@ export function rulesModal(app) {
       <li><b>Loyers</b> : quand tu as tout un groupe de couleur, ses rues sans maison rapportent le double, ses rues bâties une fois et demie.</li>
       <li><b>Le Départ</b> rapporte ${s ? s.salary : 'un salaire'} à chaque passage. En tombant pile dessus, pile ou face : un lancer de plus, ou construire sur la rue de ton choix (comme si tu y retombais).</li>
       <li><b>Fin du tour</b> : automatique quand il n'y a plus rien à faire. Si tu peux encore construire, termine-le toi-même.</li>
-      <li><b>Une dette</b> : revends des propriétés à la banque (la moitié de ce qu'elles ont coûté, maisons comprises), hypothèque ou échange pour payer, sinon c'est la faillite.</li>
+      <li><b>Une dette</b> : s'il te manque de l'argent, revends des propriétés à la banque, au prix payé, maisons et tour comprises (ou échange). Sinon, c'est la faillite. On ne vend rien hors d'une dette.</li>
       <li><b>Échanges</b> : propriétés et argent, à tout moment, avec n'importe qui.</li>
       <li><b>Minuteur</b> : si tu tardes, le jeu joue à ta place.</li>
       <li><b>Fin</b> : ${end}.</li>

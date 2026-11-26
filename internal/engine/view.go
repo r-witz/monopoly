@@ -18,9 +18,8 @@ package engine
 //	bought       who, square, amount (the square alone: "built" follows for the houses bought with it)
 //	declined     who, square: not bought, it stays free
 //	bonus        who, square, by: landed right on the start, won BonusRoll or BonusBuild
-//	built, sold  who, square, level (now), amount (paid, or got back)
+//	built        who, square, level (now), amount (paid)
 //	resold       who, square, amount: sold back to the bank with its buildings, free again
-//	mortgaged, unmortgaged   who, square, amount (got, or paid)
 //	offer, traded, rejected, cancelled   who, to, trade: a trade proposed by who, accepted by who,
 //	             rejected by who, withdrawn by who
 //	bankrupt     who, to (the creditor who gets everything, 0: the bank)
@@ -71,11 +70,10 @@ type PlayerView struct {
 }
 
 type DeedView struct {
-	Square    int    `json:"square"`
-	Owner     uint32 `json:"owner"`
-	Level     int    `json:"level"`
-	Mortgaged bool   `json:"mortgaged"`
-	Resale    int    `json:"resale"` // what selling it back to the bank would bring, with its buildings
+	Square int    `json:"square"`
+	Owner  uint32 `json:"owner"`
+	Level  int    `json:"level"`
+	Resale int    `json:"resale"` // what selling it back to the bank would bring, with its buildings
 }
 
 type DebtView struct {
@@ -93,15 +91,15 @@ type TradeView struct {
 func (g *Game) View() View {
 	v := View{Phase: g.Phase, Turn: g.id(g.Turn), Round: g.Round, MaxRounds: g.Rules.MaxRounds, Dice: g.Dice, Doubles: g.Doubles, Here: -1, Anywhere: g.anywhere,
 		Deeds: []DeedView{}, Trades: []TradeView{}, Winner: g.id(g.Winner), WinBy: g.WinBy}
-	if h := g.here; h >= 0 && g.Deeds[h].Owner == g.Turn && !g.Deeds[h].Mortgaged {
-		v.Here = h // not once traded or mortgaged since landing
+	if h := g.here; h >= 0 && g.Deeds[h].Owner == g.Turn {
+		v.Here = h // not once traded since landing
 	}
 	for i, p := range g.Players {
 		v.Players = append(v.Players, PlayerView{p.ID, p.Cash, p.Pos, p.InJail, p.JailTurns, p.JailCards, p.Lapped, p.Bankrupt, g.Worth(i)})
 	}
 	for sq, d := range g.Deeds {
 		if d.Owner >= 0 {
-			v.Deeds = append(v.Deeds, DeedView{sq, g.id(d.Owner), d.Level, d.Mortgaged, g.Resale(sq)})
+			v.Deeds = append(v.Deeds, DeedView{sq, g.id(d.Owner), d.Level, g.Resale(sq)})
 		}
 	}
 	if d := g.Debt; d != nil {

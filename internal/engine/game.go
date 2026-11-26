@@ -14,7 +14,7 @@ const (
 	PhaseRoll Phase = "roll" // the current player rolls (in jail: or pays, or uses a card)
 	PhaseBuy  Phase = "buy"  // the current player buys the square they are on (a street with houses), or declines: it stays free
 	PhaseDebt Phase = "debt" // the current player raises the cash they owe, then pays, or goes bankrupt
-	PhaseEnd  Phase = "end"  // the current player may still build, then ends the turn; with nothing to build, the turn passes by itself
+	PhaseEnd  Phase = "end"  // the current player may still build, then ends the turn; with nothing to build (or no cash for it), the turn passes by itself
 	PhaseOver Phase = "over"
 )
 
@@ -23,7 +23,7 @@ type Rules struct {
 	StartCash int // each player's cash at the start, their only asset
 	Salary    int // when passing or landing on the start
 	MaxRounds int // the game ends after this many rounds, the richest winning; 0: no limit
-	// Instant wins: owning these ends the game at once, whatever the mortgages.
+	// Instant wins: owning these ends the game at once.
 	WinTransit bool // every transit line
 	WinGroups  bool // 3 whole groups
 	WinSide    bool // every street of a side of the board
@@ -45,7 +45,7 @@ const (
 // Action is a player's move. Which fields count depends on Kind.
 type Action struct {
 	Kind    string `json:"a"`       // see Apply
-	Square  int    `json:"square"`  // build, sell, mortgage, unmortgage
+	Square  int    `json:"square"`  // build
 	Squares []int  `json:"squares"` // resell
 	Level   int    `json:"level"`   // buy: the houses bought with the street; build: the level to build up to
 	Offer   *Offer `json:"offer"`   // offer
@@ -77,9 +77,8 @@ type Player struct {
 
 // Deed is the state of a square that can be owned. Owner is a seat, -1 for the bank.
 type Deed struct {
-	Owner     int
-	Level     int
-	Mortgaged bool
+	Owner int
+	Level int
 }
 
 // Debt is what the current player owes and cannot pay yet. To is a seat, -1 for the bank.
@@ -175,18 +174,16 @@ func (g *Game) seat(id uint32) int {
 //	                         the player has passed the start, never the tower); declined, it stays free
 //	build (square, level)    the current player, PhaseRoll or PhaseEnd, on the street of theirs they just
 //	                         landed on, or on any street of theirs after landing right on the start and
-//	                         drawing BonusBuild (not mortgaged; the group need not be whole): up to level,
+//	                         drawing BonusBuild (the group need not be whole): up to level,
 //	                         once per landing. Houses up to 2, 3 once the player has passed the start; the tower only
 //	                         on a street that already had 3 houses
-//	sell (square)            one level of a street, at any time
-//	mortgage, unmortgage     at any time, not while the player owes (unmortgage); a
-//	                         street only with no building on it
-//	resell (squares)         PhaseDebt, the player who owes: sell these properties back to the bank, with
-//	                         their buildings, at their resale value (see Resale); they are free again.
-//	                         Not a mortgaged one: its value was already lent
+//	resell (squares)         PhaseDebt, the player who owes, short of cash: sell these properties back
+//	                         to the bank, with their buildings, for all they cost (see Resale); they are
+//	                         free again. The only sale there is. The debt is paid once the cash covers it
 //	pay, bankrupt            PhaseDebt: pay what is owed, or give up: everything goes to the creditor
 //	end                      PhaseEnd: the next player's turn. Unasked, once the current player has
-//	                         nothing left to build (see canBuild): managing and trading go on in any turn
+//	                         nothing left to build, or not the cash for it (see canBuild): trading goes on
+//	                         in any turn
 //	offer (offer)            propose a trade, replacing the proposer's open one; at any time. A
 //	                         counter-offer is a reject, then an offer of one's own
 //	accept, reject (trade)   the player the trade was offered to; accept checks it again
@@ -213,12 +210,6 @@ func (g *Game) Apply(p int, a Action) ([]Event, error) {
 		err = g.decline(p)
 	case "build":
 		err = g.build(p, a.Square, a.Level)
-	case "sell":
-		err = g.sell(p, a.Square)
-	case "mortgage":
-		err = g.mortgage(p, a.Square)
-	case "unmortgage":
-		err = g.unmortgage(p, a.Square)
 	case "resell":
 		err = g.resell(p, a.Squares)
 	case "pay":
@@ -246,12 +237,12 @@ func (g *Game) Apply(p int, a Action) ([]Event, error) {
 		g.events = nil
 		return nil, err
 	}
-	g.passIfDone() // the build done, or the street to build on mortgaged or traded away
+	g.passIfDone() // the build done, or the street to build on traded away
 	return g.flush(), nil
 }
 
 // Timeout plays what the rules do when the player who must decide does not: roll, decline,
-// raise the cash owed by selling and mortgaging (or go bankrupt), end the turn. It always moves the game on.
+// raise the cash owed by reselling properties (or go bankrupt), end the turn. It always moves the game on.
 func (g *Game) Timeout() []Event {
 	g.events = nil
 	switch g.Phase {
@@ -376,19 +367,15 @@ func (g *Game) instantWin(p int) string {
 	return ""
 }
 
-// Worth is what a player has: cash, properties at their price (half when mortgaged), buildings
-// at their cost.
+// Worth is what a player has: cash, and properties at their resale (their price and their
+// buildings' cost).
 func (g *Game) Worth(p int) int {
 	w := g.Players[p].Cash
 	for sq, d := range g.Deeds {
 		if d.Owner != p {
 			continue
 		}
-		s := &g.Board.Squares[sq]
-		w += s.Price + g.Board.builtCost(sq, d.Level)
-		if d.Mortgaged {
-			w -= g.Board.mortgage(sq)
-		}
+		w += g.Resale(sq)
 	}
 	return w
 }
@@ -464,14 +451,15 @@ func (g *Game) nextTurn() {
 	g.emit(Event{Kind: "turn", Who: g.id(i)})
 }
 
-// canBuild says whether the current player may still build now: on the street they landed on,
-// or on any street of theirs after landing right on the start. The cash does not count: it can
-// be raised by selling and mortgaging first.
+// canBuild says whether the current player may still build now, and has the cash for a level
+// at least: on the street they landed on, or on any street of theirs after landing right on the
+// start.
 func (g *Game) canBuild() bool {
 	p := g.Turn
 	ok := func(sq int) bool {
 		d := g.Deeds[sq]
-		return d.Owner == p && !d.Mortgaged && g.Board.Squares[sq].Kind == KindStreet && g.reach(p, d.Level) > d.Level
+		return d.Owner == p && g.Board.Squares[sq].Kind == KindStreet && g.reach(p, d.Level) > d.Level &&
+			g.Players[p].Cash >= g.Board.levelCost(sq, d.Level+1)
 	}
 	if g.here >= 0 && ok(g.here) {
 		return true

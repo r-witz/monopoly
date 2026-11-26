@@ -88,9 +88,7 @@ function describe(e) {
     case 'declined': return w + ' n\'achète pas ' + s;
     case 'bonus': return w + ' tombe pile sur le Départ : ' + (e.by === 'roll' ? 'un lancer de plus' : 'construction sur la rue de son choix');
     case 'built': return w + ' construit sur ' + s + ' (niveau ' + e.level + ')';
-    case 'sold': return w + ' revend un niveau sur ' + s + ' (+' + e.amount + ')';
-    case 'mortgaged': return w + ' hypothèque ' + s + ' (+' + e.amount + ')';
-    case 'unmortgaged': return w + ' lève l\'hypothèque de ' + s + ' (-' + e.amount + ')';
+    case 'resold': return w + ' revend ' + s + ' à la banque (+' + e.amount + ')';
     case 'offer': return w + ' propose un échange à ' + t;
     case 'traded': return w + ' accepte l\'échange de ' + t;
     case 'rejected': return w + ' refuse l\'échange de ' + t;
@@ -178,7 +176,7 @@ function cell(i) {
   const pawns = game.players.filter(p => !p.bankrupt && p.pos === i)
     .map(p => `<span class="pawn" style="background:${colorOf(p.id)}" title="${esc(nm(p.id))}"></span>`).join('');
   const lvl = !d || !d.level ? '' : d.level === board.maxLevel ? '🏢' : '🏠'.repeat(d.level);
-  return `<div class="sq ${selected === i ? 'sel' : ''} ${d && d.mortgaged ? 'mortgaged' : ''}" style="grid-row:${row};grid-column:${col}" data-do="select" data-sq="${i}">
+  return `<div class="sq ${selected === i ? 'sel' : ''}" style="grid-row:${row};grid-column:${col}" data-do="select" data-sq="${i}">
     ${s.group ? `<div class="band" style="background:${groupColors[s.group]}"></div>` : ''}
     <div>${esc(s.name)}</div>${s.price ? `<div class="muted">${s.price}</div>` : ''}<div class="lvl">${lvl}</div>
     <div class="pawns">${pawns}</div>
@@ -196,13 +194,11 @@ function squareDetail() {
   if (s.kind === 'utility') info = 'Loyer : dés × ' + board.utilityFactor.join(' (ou ×') + ' avec les deux).';
   if (s.kind === 'tax') info = 'À payer : ' + s.tax + '.';
   let actions = '';
-  if (d && d.owner === me && mine() && !mine().bankrupt) {
-    actions = ['sell:Revendre un niveau', d.mortgaged ? 'unmortgage:Lever l\'hypothèque' : 'mortgage:Hypothéquer']
-      .filter(x => s.kind === 'street' || !x.startsWith('sell'))
-      .map(x => { const [a, l] = x.split(':'); return `<button data-do="act" data-a="${a}" data-sq="${selected}">${l}</button>`; }).join('');
+  if (d && d.owner === me && game.phase === 'debt' && game.turn === me && mine().cash < game.debt.amount) {
+    actions = `<button data-do="resell" data-sq="${selected}">Revendre à la banque (+${d.resale})</button>`;
   }
   return `<h3>${esc(s.name)}</h3><div>${s.price ? 'Prix ' + s.price + '. ' : ''}${info}</div>
-    <div>${d ? 'À ' + esc(nm(d.owner)) + (d.mortgaged ? ' (hypothéquée)' : '') + (d.level ? ', niveau ' + d.level : '') : s.price ? 'Libre.' : ''}</div>${actions}`;
+    <div>${d ? 'À ' + esc(nm(d.owner)) + (d.level ? ', niveau ' + d.level : '') : s.price ? 'Libre.' : ''}</div>${actions}`;
 }
 
 function actions() {
@@ -227,7 +223,7 @@ function actions() {
     if (!myTurn) return '';
     if (game.here >= 0 && game.here === p.pos) return upgradesOf(game.here);
     if (!game.buildAnywhere) return '';
-    return 'Départ pile, au choix :<br>' + game.deeds.filter(d => d.owner === me && !d.mortgaged && board.squares[d.square].kind === 'street')
+    return 'Départ pile, au choix :<br>' + game.deeds.filter(d => d.owner === me && board.squares[d.square].kind === 'street')
       .map(d => upgradesOf(d.square)).join('');
   };
   switch (game.phase) {
@@ -244,7 +240,7 @@ function actions() {
     }
     case 'debt':
       if (!myTurn) break;
-      return `Tu dois <b>${game.debt.amount}</b> à ${esc(nm(game.debt.to))}. Vends, hypothèque ou échange, puis :<br>` +
+      return `Tu dois <b>${game.debt.amount}</b> à ${esc(nm(game.debt.to))}. S'il te manque de l'argent, revends (clique tes propriétés) ou échange, puis :<br>` +
         b('pay', 'Payer', true) + b('bankrupt', 'Déclarer faillite');
     case 'end':
       if (!myTurn) break;
@@ -334,6 +330,7 @@ const handlers = {
   back() { game = null; render(); },
   select(d) { selected = +d.sq; render(); },
   act: d => act(d.a, { square: d.sq ? +d.sq : 0, level: d.level ? +d.level : 0, trade: d.trade ? +d.trade : 0 }),
+  resell: d => act('resell', { squares: [+d.sq] }),
   offer() {
     const { to, give, get, giveCash, getCash } = trade;
     act('offer', { offer: { to, give, get, giveCash, getCash } });
