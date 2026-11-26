@@ -5,7 +5,7 @@
 const token = sessionStorage.token || (sessionStorage.token = crypto.randomUUID());
 let ws, me = 0, board = null, colors = [], room = null, game = null, seq = 0;
 let deadlineAt = 0, endsAt = 0, selected = -1, log = [], publicRooms = null;
-let trade = { to: 0, give: [], get: [], giveCash: 0, getCash: 0 }, draft = null;
+let draft = null;
 
 const groupColors = ['', '#8d5524', '#2ec4f1', '#ff6fb5', '#9b5de5', '#ff8a1f', '#f2c014', '#e63946', '#3a6ff7'];
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -90,10 +90,6 @@ function describe(e) {
     case 'built': return w + ' construit sur ' + s + ' (niveau ' + e.level + ')';
     case 'flew': return w + ' prend l\'avion pour ' + s + ' (-' + e.amount + ')';
     case 'resold': return w + ' revend ' + s + ' à la banque (+' + e.amount + ')';
-    case 'offer': return w + ' propose un échange à ' + t;
-    case 'traded': return w + ' accepte l\'échange de ' + t;
-    case 'rejected': return w + ' refuse l\'échange de ' + t;
-    case 'cancelled': return w + ' retire son offre à ' + t;
     case 'bankrupt': return w + ' fait faillite' + (e.to ? ' au profit de ' + t : '');
     case 'over': return 'Partie terminée : ' + w + ' gagne' + (e.by ? ' (' + { transit: 'toutes les lignes', groups: '3 quartiers complets', side: 'un côté complet' }[e.by] + ')' : '') + ' !';
   }
@@ -245,36 +241,13 @@ function actions() {
     }
     case 'debt':
       if (!myTurn) break;
-      return `Tu dois <b>${game.debt.amount}</b> à ${esc(nm(game.debt.to))}. S'il te manque de l'argent, revends (clique tes propriétés) ou échange, puis :<br>` +
+      return `Tu dois <b>${game.debt.amount}</b> à ${esc(nm(game.debt.to))}. S'il te manque de l'argent, revends (clique tes propriétés), puis :<br>` +
         b('pay', 'Payer', true) + b('bankrupt', 'Déclarer faillite');
     case 'end':
       if (!myTurn) break;
       return upgrades() + b('end', 'Finir le tour', true);
   }
   return '<p class="muted">À ' + esc(nm(game.turn)) + ' de jouer.</p>';
-}
-
-function trades() {
-  const p = mine();
-  if (!p || p.bankrupt || game.phase === 'over') return '';
-  const list = game.trades.filter(t => t.from === me || t.to === me).map(t => {
-    const side = (sq, cash) => [...sq.map(sqName), cash ? cash + ' €' : ''].filter(Boolean).map(esc).join(', ') || 'rien';
-    return `<div>${esc(nm(t.from))} donne <b>${side(t.give, t.giveCash)}</b> contre <b>${side(t.get, t.getCash)}</b> de ${esc(nm(t.to))}
-      ${t.to === me ? `<button data-do="act" data-a="accept" data-trade="${t.id}">Accepter</button><button data-do="act" data-a="reject" data-trade="${t.id}">Refuser</button>`
-        : `<button data-do="act" data-a="cancel" data-trade="${t.id}">Retirer</button>`}</div>`;
-  }).join('');
-  const others = game.players.filter(o => o.id !== me && !o.bankrupt);
-  if (!others.some(o => o.id === trade.to)) trade = { to: others[0]?.id || 0, give: [], get: [], giveCash: 0, getCash: 0 };
-  const boxes = (owner, key) => game.deeds.filter(d => d.owner === owner).map(d =>
-    `<label><input type="checkbox" data-trade-sq="${key}" value="${d.square}" ${trade[key].includes(d.square) ? 'checked' : ''}> ${esc(sqName(d.square))}</label><br>`).join('') || '<span class="muted">rien</span>';
-  return `<div class="box"><h3>Échanges</h3>${list}
-    <details ${trade.open ? 'open' : ''} data-do="toggleTrade"><summary>Proposer un échange</summary>
-      avec <select id="trade-to" data-bind="tradeTo">${others.map(o => `<option value="${o.id}" ${o.id === trade.to ? 'selected' : ''}>${esc(nm(o.id))}</option>`).join('')}</select>
-      <table><tr><th>Je donne</th><th>Je reçois</th></tr><tr><td>${boxes(me, 'give')}</td><td>${boxes(trade.to, 'get')}</td></tr>
-      <tr><td><input type="number" id="trade-giveCash" data-bind="giveCash" value="${trade.giveCash}"> €</td>
-      <td><input type="number" id="trade-getCash" data-bind="getCash" value="${trade.getCash}"> €</td></tr></table>
-      <button data-do="offer">Envoyer l'offre</button>
-    </details></div>`;
 }
 
 function gameView() {
@@ -293,7 +266,6 @@ function gameView() {
     <aside>
       <div class="box"><table><tr><th>Joueur</th><th>Cash</th><th>Patrimoine</th><th></th></tr>${rows}</table></div>
       <div class="box"><h3>À faire</h3>${actions()}</div>
-      ${trades()}
       <div class="box"><h3>Journal</h3><div class="log">${log.map(l => '<div>' + esc(l) + '</div>').join('')}</div></div>
       ${owner && !over ? '<button data-do="stop">Arrêter la partie</button>' : ''}
       <button data-do="leave">Quitter la salle</button>
@@ -334,14 +306,8 @@ const handlers = {
   kick: d => send({ t: 'kick', id: +d.id }),
   back() { game = null; render(); },
   select(d) { selected = +d.sq; render(); },
-  act: d => act(d.a, { square: d.sq ? +d.sq : 0, level: d.level ? +d.level : 0, trade: d.trade ? +d.trade : 0 }),
+  act: d => act(d.a, { square: d.sq ? +d.sq : 0, level: d.level ? +d.level : 0 }),
   resell: d => act('resell', { squares: [+d.sq] }),
-  offer() {
-    const { to, give, get, giveCash, getCash } = trade;
-    act('offer', { offer: { to, give, get, giveCash, getCash } });
-    trade = { ...trade, give: [], get: [], giveCash: 0, getCash: 0 };
-  },
-  toggleTrade() { },
 };
 
 document.addEventListener('click', e => {
@@ -349,19 +315,13 @@ document.addEventListener('click', e => {
   if (!el || el.tagName === 'DETAILS') return;
   handlers[el.dataset.do](el.dataset);
 });
-document.addEventListener('toggle', e => { if (e.target.dataset.do === 'toggleTrade') trade.open = e.target.open; }, true);
 document.addEventListener('input', e => {
   const t = e.target, b = t.dataset;
-  if (b.bind === 'giveCash' || b.bind === 'getCash') trade[b.bind] = +t.value;
-  else if (b.set && draft) draft[b.set] = t.type === 'checkbox' ? t.checked : t.type === 'number' ? +t.value : t.value;
+  if (b.set && draft) draft[b.set] = t.type === 'checkbox' ? t.checked : t.type === 'number' ? +t.value : t.value;
 });
 document.addEventListener('change', e => {
   const t = e.target, b = t.dataset;
-  if (b.bind === 'tradeTo') { trade = { ...trade, to: +t.value, get: [] }; render(); }
-  else if (b.tradeSq) {
-    const sq = +t.value, list = trade[b.tradeSq];
-    trade[b.tradeSq] = t.checked ? [...list, sq] : list.filter(x => x !== sq);
-  } else if (b.set && draft) draft[b.set] = t.type === 'checkbox' ? t.checked : t.type === 'number' ? +t.value : t.value;
+  if (b.set && draft) draft[b.set] = t.type === 'checkbox' ? t.checked : t.type === 'number' ? +t.value : t.value;
 });
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;

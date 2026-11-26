@@ -66,6 +66,7 @@ type Board struct {
 	JailFine      int      `json:"jailFine"`      // to leave it
 	JailTurns     int      `json:"jailTurns"`     // failed rolls before the fine is due anyway
 	FlightCost    int      `json:"flightCost"`    // flying from the airport to any square
+	ResaleRate    int      `json:"resaleRate"`    // percent of what a property and its buildings cost, sold back to the bank
 	MaxLevel      int      `json:"maxLevel"`      // levels 1 to MaxLevel-1 are houses, MaxLevel a tower
 	TransitRent   []int    `json:"transitRent"`   // by lines owned, 1 to 4
 	UtilityFactor []int    `json:"utilityFactor"` // times the dice, by utilities owned, 1 to 2
@@ -174,6 +175,7 @@ var Classic = &Board{
 	JailFine:      50,
 	JailTurns:     3,
 	FlightCost:    50,
+	ResaleRate:    75,
 	MaxLevel:      4,
 	TransitRent:   []int{25, 50, 100, 200},
 	UtilityFactor: []int{4, 10},

@@ -260,42 +260,6 @@ func TestTimers(t *testing.T) {
 	}
 }
 
-// A trade proposed and accepted over the wire changes hands.
-func TestTradeWebsocket(t *testing.T) {
-	hub := NewHub(Config{MaxRooms: 10}, engine.Classic)
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /ws", hub.ServeWS)
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-	defer hub.Close()
-	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws"
-
-	a, b := dial(t, url, "token-alice"), dial(t, url, "token-bruno")
-	a.send(map[string]any{"t": "create"})
-	code := a.until(func(m inMsg) bool { return m.T == "room" }).Code
-	b.send(map[string]any{"t": "join", "code": code})
-	b.until(func(m inMsg) bool { return m.T == "room" })
-	a.send(map[string]any{"t": "start"})
-	st := a.until(func(m inMsg) bool { return m.T == "game" }).State
-	cash := func(v *engine.View, id uint32) int {
-		return v.Players[slices.IndexFunc(v.Players, func(p engine.PlayerView) bool { return p.ID == id })].Cash
-	}
-	if len(st.Deeds) != 0 {
-		t.Fatalf("players start with properties: %+v", st.Deeds)
-	}
-	before := cash(st, a.id)
-	a.send(map[string]any{"t": "act", "a": "offer", "offer": map[string]any{"to": b.id, "giveCash": 25, "getCash": 10}})
-	offered := b.until(func(m inMsg) bool { return m.T == "game" && len(m.State.Trades) > 0 }).State.Trades[0]
-	if offered.From != a.id || offered.To != b.id || offered.GiveCash != 25 {
-		t.Fatalf("offer: %+v", offered)
-	}
-	b.send(map[string]any{"t": "act", "a": "accept", "trade": offered.ID})
-	after := a.until(func(m inMsg) bool { return m.T == "game" && len(m.State.Trades) == 0 }).State
-	if cash(after, a.id) != before-15 {
-		t.Fatalf("after the trade: %d, want %d", cash(after, a.id), before-15)
-	}
-}
-
 // With nobody playing, the shard fires the turn timer on its own (slow: one TurnSeconds).
 func TestTurnTimerFires(t *testing.T) {
 	if testing.Short() {

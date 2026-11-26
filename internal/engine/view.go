@@ -21,8 +21,6 @@ package engine
 //	bonus        who, square, by: landed right on the start, won BonusRoll or BonusBuild
 //	built        who, square, level (now), amount (paid)
 //	resold       who, square, amount: sold back to the bank with its buildings, free again
-//	offer, traded, rejected, cancelled   who, to, trade: a trade proposed by who, accepted by who,
-//	             rejected by who, withdrawn by who
 //	bankrupt     who, to (the creditor who gets everything, 0: the bank)
 //	over         who: the winner, by: the instant win it won by (WinByTransit…), none for the richest
 type Event struct {
@@ -34,7 +32,6 @@ type Event struct {
 	Dice   []int  `json:"dice,omitempty"`
 	Card   int    `json:"card"`
 	Level  int    `json:"level,omitempty"`
-	Trade  int    `json:"trade,omitempty"`
 	By     string `json:"by,omitempty"`
 }
 
@@ -53,7 +50,6 @@ type View struct {
 	Players   []PlayerView `json:"players"`       // in the order they play
 	Deeds     []DeedView   `json:"deeds"`         // the squares someone owns
 	Debt      *DebtView    `json:"debt,omitempty"`
-	Trades    []TradeView  `json:"trades"`
 	Ranking   []uint32     `json:"ranking"` // the standings now, final once over
 	Winner    uint32       `json:"winner,omitempty"`
 	WinBy     string       `json:"winBy,omitempty"` // the instant win the winner won by, "" for the richest
@@ -84,17 +80,11 @@ type DebtView struct {
 	To     uint32 `json:"to"` // 0: the bank
 }
 
-type TradeView struct {
-	ID   int    `json:"id"`
-	From uint32 `json:"from"`
-	Offer
-}
-
 func (g *Game) View() View {
 	v := View{Phase: g.Phase, Turn: g.id(g.Turn), Round: g.Round, MaxRounds: g.Rules.MaxRounds, Dice: g.Dice, Doubles: g.Doubles, Here: -1, Anywhere: g.anywhere, Fly: g.fly,
-		Deeds: []DeedView{}, Trades: []TradeView{}, Winner: g.id(g.Winner), WinBy: g.WinBy}
+		Deeds: []DeedView{}, Winner: g.id(g.Winner), WinBy: g.WinBy}
 	if h := g.here; h >= 0 && g.Deeds[h].Owner == g.Turn {
-		v.Here = h // not once traded since landing
+		v.Here = h
 	}
 	for i, p := range g.Players {
 		v.Players = append(v.Players, PlayerView{p.ID, p.Cash, p.Pos, p.InJail, p.JailTurns, p.JailCards, p.Lapped, p.Bankrupt, g.Worth(i)})
@@ -106,9 +96,6 @@ func (g *Game) View() View {
 	}
 	if d := g.Debt; d != nil {
 		v.Debt = &DebtView{g.id(g.Turn), d.Amount, g.id(d.To)}
-	}
-	for _, t := range g.Trades {
-		v.Trades = append(v.Trades, TradeView{t.ID, g.id(t.From), t.Offer})
 	}
 	for _, seat := range g.Ranking() {
 		v.Ranking = append(v.Ranking, g.id(seat))

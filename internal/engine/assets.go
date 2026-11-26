@@ -65,10 +65,10 @@ func (g *Game) build(p, sq, level int) error {
 	return nil
 }
 
-// Resale is what selling square sq back to the bank brings: all it cost, its price and every
-// level built on it.
+// Resale is what selling square sq back to the bank brings: Board.ResaleRate percent of all it
+// cost, its price and every level built on it, rounded down.
 func (g *Game) Resale(sq int) int {
-	return g.Board.Squares[sq].Price + g.Board.builtCost(sq, g.Deeds[sq].Level)
+	return (g.Board.Squares[sq].Price + g.Board.builtCost(sq, g.Deeds[sq].Level)) * g.Board.ResaleRate / 100
 }
 
 // resell sells squares of p back to the bank, p owing more than their cash: see Apply. Once the
@@ -152,14 +152,14 @@ func (g *Game) liquidate(p, amount int) {
 	}
 }
 
-// bankrupt takes p out of the game. Buildings are sold back to the bank, for what they cost; then
+// bankrupt takes p out of the game. Buildings are sold back to the bank, at the resale rate; then
 // cash, properties and cards go to the creditor to, or back to the bank (properties free) when to
 // is -1.
 func (g *Game) bankrupt(p, to int) {
 	pl := g.Players[p]
 	for sq, d := range g.Deeds {
 		if d.Owner == p && d.Level > 0 {
-			g.transfer(-1, p, g.Board.builtCost(sq, d.Level))
+			g.transfer(-1, p, g.Board.builtCost(sq, d.Level)*g.Board.ResaleRate/100)
 			g.Deeds[sq].Level = 0
 		}
 	}
@@ -179,7 +179,6 @@ func (g *Game) bankrupt(p, to int) {
 	pl.Out = g.out
 	g.emit(Event{Kind: "bankrupt", Who: pl.ID, To: g.id(to)})
 
-	g.Trades = slices.DeleteFunc(g.Trades, func(t *Trade) bool { return t.From == p || t.To == p })
 	if d := g.Debt; d != nil {
 		if p == g.Turn {
 			g.Debt = nil

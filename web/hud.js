@@ -1,5 +1,5 @@
 // Everything drawn in HTML over the board: the screens before a game, and during one the players,
-// what to do, the square selected, the trades and the log. render(app) draws it all from app.
+// what to do, the square selected and the log. render(app) draws it all from app.
 import { GROUP_COLORS } from './scene.js';
 
 export const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -35,10 +35,6 @@ export function describe(app, e) {
     case 'declined': return w + ' n\'achète pas ' + s;
     case 'built': return w + ' construit sur ' + s;
     case 'resold': return w + ' revend ' + s + ' à la banque (' + e.amount + ')';
-    case 'offer': return w + ' propose un échange à ' + t;
-    case 'traded': return w + ' accepte l\'échange de ' + t;
-    case 'rejected': return w + ' refuse l\'échange de ' + t;
-    case 'cancelled': return w + ' retire son offre';
     case 'bankrupt': return w + ' fait faillite 💥';
     case 'over': return '🏆 ' + w + ' gagne la partie' + (e.by ? ' : ' + WIN_BY[e.by] : '') + ' !';
   }
@@ -74,7 +70,6 @@ export function render(app) {
     $('actions').innerHTML = actions(app);
     $('deed').innerHTML = deed(app);
     $('deed').hidden = app.selected < 0;
-    $('trades').innerHTML = trades(app);
     renderLog(app);
   }
   // the window is drawn again only when what it shows changed: its animations and the button
@@ -308,7 +303,7 @@ function actions(app) {
       return box(`<b>${esc(s.name)}</b> : le terrain, ou avec des maisons ?${later}`, levelButtons(b, me, me.pos, 'buy', 0, s.price) + btn('decline', 'Ne pas acheter'), 'mine');
     } break;
     case 'debt': if (mine) {
-      // short of cash: selling is the way (or trading); with the cash, by a trade, paying
+      // short of cash: selling is the way; with the cash, paying
       if (me.cash < g.debt.amount) {
         return box(`Tu dois <b>${fmt(g.debt.amount)}</b> à ${esc(nm(g.debt.to))} : il te manque <b>${fmt(g.debt.amount - me.cash)}</b>.`,
           '<button class="btn big main" data-do="openSale">🏷 Vendre</button>' + btn('bankrupt', 'Faillite', 'danger'), 'mine');
@@ -355,42 +350,6 @@ function deed(app) {
   </div>`;
 }
 
-function trades(app) {
-  const { nm } = names(app), g = app.game, b = app.board;
-  const me = g.players.find(p => p.id === app.me);
-  if (!me || me.bankrupt || g.phase === 'over') return '';
-  const side = (sq, cash) => [...sq.map(i => esc(b.squares[i].name)), cash ? money(cash) : ''].filter(Boolean).join(', ') || 'rien';
-  const list = g.trades.filter(t => t.from === app.me || t.to === app.me).map(t => `<div class="trade ${t.to === app.me ? 'forme' : ''}">
-    <div><b>${esc(nm(t.from))}</b> donne ${side(t.give, t.giveCash)}</div>
-    <div>contre ${side(t.get, t.getCash)} de <b>${esc(nm(t.to))}</b></div>
-    <div class="acts">${t.to === app.me
-      ? `<button class="btn small main" data-do="act" data-a="accept" data-trade="${t.id}">Accepter</button><button class="btn small" data-do="act" data-a="reject" data-trade="${t.id}">Refuser</button>`
-      : `<button class="btn small" data-do="act" data-a="cancel" data-trade="${t.id}">Retirer</button>`}</div></div>`).join('');
-  return `<div class="glass trades"><div class="row"><b class="grow">Échanges</b><button class="btn small" data-do="openTrade">🤝 Proposer</button></div>${list}</div>`;
-}
-
-// the trade editor, in the modal
-export function tradeModal(app) {
-  const { nm, colorOf } = names(app), g = app.game, b = app.board, t = app.trade;
-  const others = g.players.filter(o => o.id !== app.me && !o.bankrupt);
-  if (!others.some(o => o.id === t.to)) Object.assign(t, { to: others[0]?.id || 0, get: [] });
-  const me = g.players.find(p => p.id === app.me), them = g.players.find(p => p.id === t.to);
-  const boxes = (owner, key) => g.deeds.filter(d => d.owner === owner).map(d => {
-    const s = b.squares[d.square];
-    return `<label class="chip ${t[key].includes(d.square) ? 'on' : ''}" style="--c:${s.group ? GROUP_COLORS[s.group] : '#2b2d42'}">
-      <input type="checkbox" data-trade-sq="${key}" value="${d.square}" ${t[key].includes(d.square) ? 'checked' : ''}>${esc(s.name)}</label>`;
-  }).join('') || '<span class="muted">aucune propriété</span>';
-  return `<div class="card modalbox trade-editor">
-    <h2>Proposer un échange</h2>
-    <div class="row">avec ${others.map(o => `<button class="btn small ${o.id === t.to ? 'main' : ''}" data-do="tradeTo" data-id="${o.id}"><i class="token" style="--c:${colorOf(o.id)}"></i> ${esc(nm(o.id))}</button>`).join('')}</div>
-    <div class="cols">
-      <section><h3>Je donne</h3>${boxes(app.me, 'give')}<label class="cash">+ <input id="trade-giveCash" class="field" type="number" min="0" max="${me.cash}" data-bind="giveCash" value="${t.giveCash}"> ${money(me.cash)} dispo</label></section>
-      <section><h3>Je reçois</h3>${them ? boxes(t.to, 'get') : ''}<label class="cash">+ <input id="trade-getCash" class="field" type="number" min="0" data-bind="getCash" value="${t.getCash}"> ${them ? money(them.cash) : ''} chez lui</label></section>
-    </div>
-    <div class="bar"><button class="btn" data-do="closeModal">Annuler</button><button class="btn big main" data-do="offer">Envoyer l'offre</button></div>
-  </div>`;
-}
-
 // what the player who owes can sell back to the bank, to pay: their properties with what each
 // brings, the selection against what is missing
 export function saleModal(app) {
@@ -418,7 +377,7 @@ export function saleModal(app) {
   return `<div class="card modalbox sale">
     <h2>Vendre pour payer</h2>
     <p class="owe">Tu dois <b>${fmt(g.debt.amount)}</b> à <b>${esc(nm(g.debt.to))}</b>. Tu as ${money(me.cash)}${need ? `, il te manque <b>${fmt(need)}</b>` : ''}.</p>
-    <p class="muted hint">Une propriété vendue retourne à la banque au prix payé, maisons et tour comprises, et redevient libre.</p>
+    <p class="muted hint">Une propriété vendue retourne à la banque pour ${b.resaleRate} % de ce qu'elle a coûté, maisons et tour comprises, et redevient libre.</p>
     <div class="salelist">${mine.map(row).join('') || '<span class="muted">Tu n\'as aucune propriété.</span>'}</div>
     <div class="saletotal">
       <div class="row"><span class="grow">Sélection</span>${money(gain)}</div>
@@ -465,8 +424,7 @@ export function rulesModal(app) {
       <li><b>L'Aéroport</b> : en t'y arrêtant, au tour suivant, au lieu de lancer les dés, envole-toi vers la case de ton choix pour ${b.flightCost}. Un vol ne passe pas par le Départ : pas de salaire, et le Départ n'est pas une destination.</li>
       <li><b>Le Départ</b> rapporte ${s ? s.salary : 'un salaire'} à chaque passage. En tombant pile dessus, pile ou face : un lancer de plus, ou construire sur la rue de ton choix (comme si tu y retombais).</li>
       <li><b>Fin du tour</b> : automatique quand il n'y a plus rien à faire. Si tu peux encore construire, termine-le toi-même.</li>
-      <li><b>Une dette</b> : s'il te manque de l'argent, revends des propriétés à la banque, au prix payé, maisons et tour comprises (ou échange). Sinon, c'est la faillite. On ne vend rien hors d'une dette.</li>
-      <li><b>Échanges</b> : propriétés et argent, à tout moment, avec n'importe qui.</li>
+      <li><b>Une dette</b> : s'il te manque de l'argent, revends des propriétés à la banque, pour ${b.resaleRate} % de ce qu'elles ont coûté, maisons et tour comprises. Sinon, c'est la faillite. On ne vend rien hors d'une dette.</li>
       <li><b>Minuteur</b> : si tu tardes, le jeu joue à ta place.</li>
       <li><b>Fin</b> : ${end}.</li>
       ${wins.length ? `<li><b>Victoire immédiate</b> : ${wins.join(', ou ')}.</li>` : ''}

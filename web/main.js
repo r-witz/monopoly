@@ -8,7 +8,6 @@ const token = sessionStorage.token || (sessionStorage.token = crypto.randomUUID(
 const app = {
   me: 0, board: null, colors: [], room: null, game: null, seq: 0, deadlineAt: 0, endsAt: 0, selected: -1,
   log: [], logOpen: false, rooms: null, draft: null, modal: null, dismissed: 0,
-  trade: { to: 0, give: [], get: [], giveCash: 0, getCash: 0 },
   sale: [], // the squares picked to sell back to the bank, to pay a debt
   myName: sessionStorage.name || '', myColor: sessionStorage.color != null ? +sessionStorage.color : -1,
 };
@@ -32,7 +31,7 @@ function connect() {
 const send = m => ws && ws.readyState === 1 && ws.send(JSON.stringify(m));
 function act(a, extra = {}) {
   document.body.classList.add('waiting'); // until the answer: no second click
-  send({ t: 'act', a, square: 0, trade: 0, ...extra });
+  send({ t: 'act', a, square: 0, ...extra });
 }
 
 const REFUSALS = { cash: 'Pas assez d\'argent.', phase: 'Pas maintenant.', notyours: 'Ce n\'est pas ton tour.', invalid: 'Action impossible ici.',
@@ -240,18 +239,10 @@ const handlers = {
   start: () => send({ t: 'start' }),
   stop: () => confirm('Arrêter la partie pour tout le monde ?') && send({ t: 'stop' }),
   kick: d => send({ t: 'kick', id: +d.id }),
-  act: d => act(d.a, { square: d.sq ? +d.sq : 0, level: d.level ? +d.level : 0, trade: d.trade ? +d.trade : 0 }),
+  act: d => act(d.a, { square: d.sq ? +d.sq : 0, level: d.level ? +d.level : 0 }),
   unselect() { app.selected = -1; scene.select(-1); hud.render(app); },
   pick: d => scene.onPick(+d.sq),
   toggleLog() { app.logOpen = !app.logOpen; hud.renderLog(app); },
-  openTrade() { app.trade = { to: app.trade.to, give: [], get: [], giveCash: 0, getCash: 0 }; app.modal = hud.tradeModal; hud.render(app); },
-  tradeTo(d) { Object.assign(app.trade, { to: +d.id, get: [] }); hud.render(app); },
-  offer() {
-    const { to, give, get, giveCash, getCash } = app.trade;
-    act('offer', { offer: { to, give, get, giveCash, getCash } });
-    app.modal = null;
-    hud.render(app);
-  },
   openSale() { app.sale = []; app.modal = hud.saleModal; hud.render(app); },
   sell() {
     const g = app.game;
@@ -283,7 +274,6 @@ document.addEventListener('input', e => {
   const t = e.target, b = t.dataset;
   if (t.id === 'name') app.myName = t.value; // kept as typed, sent on change
   else if (t.id === 'code') app.code = t.value;
-  else if (b.bind === 'giveCash' || b.bind === 'getCash') app.trade[b.bind] = Math.max(0, +t.value);
   else if (b.set && app.draft) app.draft[b.set] = t.type === 'checkbox' ? t.checked : t.type === 'number' ? +t.value : t.value;
 });
 document.addEventListener('change', e => {
@@ -291,10 +281,6 @@ document.addEventListener('change', e => {
   if ('saleSq' in b) {
     const sq = +t.value;
     app.sale = t.checked ? [...app.sale, sq] : app.sale.filter(x => x !== sq);
-    hud.render(app);
-  } else if (b.tradeSq) {
-    const sq = +t.value, list = app.trade[b.tradeSq];
-    app.trade[b.tradeSq] = t.checked ? [...list, sq] : list.filter(x => x !== sq);
     hud.render(app);
   } else if (b.set && app.draft) {
     let v = t.type === 'number' ? +t.value : t.value;

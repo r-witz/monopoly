@@ -206,11 +206,6 @@ body.animating #actions .btn[data-do=act], body.waiting #actions .btn[data-do=ac
 .deedcard .owner { padding: 6px 14px 2px; display: flex; align-items: center; gap: 6px; }
 .deedcard .acts { padding: 4px 12px 4px; display: flex; flex-wrap: wrap; gap: 6px; }
 .deedcard table:last-child { margin-bottom: 10px; }
-.trades { padding: 8px 12px; }
-.trade { border-top: 2px dashed #d8cfb8; padding: 6px 0; font-size: 14px; }
-.trade.forme { background: #fff3b8; margin: 0 -12px; padding: 6px 12px; }
-.trade .acts { display: flex; gap: 6px; margin-top: 4px; }
-.trade-editor .row { flex-wrap: wrap; }
 #log { margin-top: auto; padding: 8px 12px; font-size: 13px; flex: 0 1 auto !important; min-height: 96px; overflow: auto; scrollbar-width: thin; scrollbar-color: rgba(29, 42, 58, .45) transparent; }
 #log div { padding: 2px 0; border-bottom: 1px dashed #e3dac4; }
 #log .sep { color: #6b7685; }
@@ -252,7 +247,6 @@ body.animating #actions .btn[data-do=act], body.waiting #actions .btn[data-do=ac
 @keyframes rise-up { from { transform: scaleY(0); } }
 @keyframes drop { from { transform: translateY(-180px); opacity: 0; } 60% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .step .who, .step .block { animation: none; } }
-.trade-editor .cols { grid-template-columns: 1fr 1fr; margin-top: 10px; }
 .chip { --c: #2b2d42; display: flex; align-items: center; gap: 6px; border: 2px solid var(--ink); border-left: 10px solid var(--c); border-radius: 8px;
   padding: 3px 8px; margin: 3px 0; cursor: pointer; background: #fff; font-size: 14px; }
 .chip.on { background: #fff3b8; }
@@ -330,7 +324,6 @@ body.animating #actions .btn[data-do=act], body.waiting #actions .btn[data-do=ac
   #banner { font-size: 32px; }
 }
 @media (max-width: 640px) {
-  .trade-editor .cols { grid-template-columns: 1fr; }
   .topbar .pill.muted { display: none; }
   .topbar { flex-wrap: nowrap; gap: 6px; padding: 5px 8px; white-space: nowrap; }
   .topbar .round { font-size: 13px; }
