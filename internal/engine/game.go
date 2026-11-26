@@ -14,7 +14,7 @@ const (
 	PhaseRoll Phase = "roll" // the current player rolls (in jail: or pays, or uses a card)
 	PhaseBuy  Phase = "buy"  // the current player buys the square they are on (a street with houses), or declines: it stays free
 	PhaseDebt Phase = "debt" // the current player raises the cash they owe, then pays, or goes bankrupt
-	PhaseEnd  Phase = "end"  // the current player may still manage, then ends the turn
+	PhaseEnd  Phase = "end"  // the current player may still build, then ends the turn; with nothing to build, the turn passes by itself
 	PhaseOver Phase = "over"
 )
 
@@ -181,7 +181,8 @@ func (g *Game) seat(id uint32) int {
 //	mortgage, unmortgage     at any time, not while the player owes (unmortgage); a
 //	                         street only with no building on it
 //	pay, bankrupt            PhaseDebt: pay what is owed, or give up: everything goes to the creditor
-//	end                      PhaseEnd: the next player's turn
+//	end                      PhaseEnd: the next player's turn. Unasked, once the current player has
+//	                         nothing left to build (see canBuild): managing and trading go on in any turn
 //	offer (offer)            propose a trade, replacing the proposer's open one; at any time. A
 //	                         counter-offer is a reject, then an offer of one's own
 //	accept, reject (trade)   the player the trade was offered to; accept checks it again
@@ -239,6 +240,7 @@ func (g *Game) Apply(p int, a Action) ([]Event, error) {
 		g.events = nil
 		return nil, err
 	}
+	g.passIfDone() // the build done, or the street to build on mortgaged or traded away
 	return g.flush(), nil
 }
 
@@ -454,6 +456,35 @@ func (g *Game) nextTurn() {
 	g.Turn = i
 	g.setPhase(PhaseRoll)
 	g.emit(Event{Kind: "turn", Who: g.id(i)})
+}
+
+// canBuild says whether the current player may still build now: on the street they landed on,
+// or on any street of theirs after landing right on the start. The cash does not count: it can
+// be raised by selling and mortgaging first.
+func (g *Game) canBuild() bool {
+	p := g.Turn
+	ok := func(sq int) bool {
+		d := g.Deeds[sq]
+		return d.Owner == p && !d.Mortgaged && g.Board.Squares[sq].Kind == KindStreet && g.reach(p, d.Level) > d.Level
+	}
+	if g.here >= 0 && ok(g.here) {
+		return true
+	}
+	if g.anywhere {
+		for sq := range g.Deeds {
+			if ok(sq) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// passIfDone hands the turn on when the current player waits in PhaseEnd with nothing to build.
+func (g *Game) passIfDone() {
+	if g.Phase == PhaseEnd && !g.canBuild() {
+		g.nextTurn()
+	}
 }
 
 func (g *Game) endTurn(p int) error {

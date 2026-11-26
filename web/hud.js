@@ -418,6 +418,7 @@ export function rulesModal(app) {
       <li><b>Maisons</b> : en achetant une rue, prends-la nue ou avec 1 ou 2 maisons (3 après ton premier passage au Départ). Ensuite, chaque fois que tu retombes sur ta rue, ajoute des maisons, sans avoir besoin de tout le groupe. La tour se construit sur une rue à 3 maisons, en y retombant.</li>
       <li><b>Loyers</b> : quand tu as tout un groupe de couleur, ses rues sans maison rapportent le double, ses rues bâties une fois et demie.</li>
       <li><b>Le Départ</b> rapporte ${s ? s.salary : 'un salaire'} à chaque passage. En tombant pile dessus, pile ou face : un lancer de plus, ou construire sur la rue de ton choix (comme si tu y retombais).</li>
+      <li><b>Fin du tour</b> : automatique quand il n'y a plus rien à faire. Si tu peux encore construire, termine-le toi-même.</li>
       <li><b>Une dette</b> : vends, hypothèque ou échange pour payer, sinon c'est la faillite.</li>
       <li><b>Échanges</b> : propriétés et argent, à tout moment, avec n'importe qui.</li>
       <li><b>Minuteur</b> : si tu tardes, le jeu joue à ta place.</li>

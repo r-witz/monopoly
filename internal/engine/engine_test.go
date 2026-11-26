@@ -58,6 +58,9 @@ func invariants(t *testing.T, g *Game) {
 	if (g.Phase == PhaseDebt) != (g.Debt != nil) {
 		t.Fatalf("phase %s with debt %v", g.Phase, g.Debt)
 	}
+	if g.Phase == PhaseEnd && !g.canBuild() {
+		t.Fatalf("phase end for seat %d, with nothing to build", g.Turn)
+	}
 	if g.Phase != PhaseOver && g.Players[g.Turn].Bankrupt {
 		t.Fatalf("phase %s for bankrupt seat %d", g.Phase, g.Turn)
 	}
@@ -193,8 +196,8 @@ func TestThreeDoublesGoToJail(t *testing.T) {
 			}
 			continue
 		}
-		if !has(ev, "jailed") || !g.Players[0].InJail || g.Phase != PhaseEnd {
-			t.Fatalf("after 3 doubles: jail %v phase %s", g.Players[0].InJail, g.Phase)
+		if !has(ev, "jailed") || !g.Players[0].InJail || !has(ev, "turn") || g.Turn != 1 {
+			t.Fatalf("after 3 doubles: jail %v turn %d", g.Players[0].InJail, g.Turn)
 		}
 	}
 }
@@ -320,17 +323,15 @@ func TestBuildOnLanding(t *testing.T) {
 	if g.Deeds[21].Level != 2 || g.Players[0].Cash != cash-s.BuildCost {
 		t.Fatalf("level %d cash %d", g.Deeds[21].Level, g.Players[0].Cash)
 	}
-	if _, err := g.Apply(0, Action{Kind: "build", Square: 21, Level: 2}); err != ErrInvalid {
-		t.Fatalf("built twice on one landing: %v", err)
+	if g.Turn != 1 { // built: nothing left to do, the turn passed
+		t.Fatalf("turn %d after the build", g.Turn)
 	}
-	must(t, g, 0, Action{Kind: "end"})
 
-	// 2 houses before a lap: nothing to build
+	// 2 houses before a lap: nothing to build, the turn passes
 	standOn(t, g, 0, 21)
-	if g.here != -1 {
-		t.Fatal("here with 2 houses before a lap")
+	if g.here != -1 || g.Turn != 1 {
+		t.Fatalf("here %d turn %d with 2 houses before a lap", g.here, g.Turn)
 	}
-	must(t, g, 0, Action{Kind: "end"})
 
 	g.Players[0].Lapped = true
 	standOn(t, g, 0, 21)
@@ -338,7 +339,6 @@ func TestBuildOnLanding(t *testing.T) {
 		t.Fatalf("the tower from 2 houses: %v", err)
 	}
 	must(t, g, 0, Action{Kind: "build", Square: 21, Level: 3})
-	must(t, g, 0, Action{Kind: "end"})
 
 	standOn(t, g, 0, 21)
 	cash = g.Players[0].Cash
@@ -346,18 +346,16 @@ func TestBuildOnLanding(t *testing.T) {
 	if g.Deeds[21].Level != 4 || g.Players[0].Cash != cash-s.TowerCost {
 		t.Fatalf("level %d cash %d", g.Deeds[21].Level, g.Players[0].Cash)
 	}
-	must(t, g, 0, Action{Kind: "end"})
 
 	// at the tower, nothing left to build
 	standOn(t, g, 0, 21)
-	if g.here != -1 {
+	if g.here != -1 || g.Turn != 1 {
 		t.Fatal("here at the tower")
 	}
 	// a mortgaged street of one's own: nothing either
 	g.Deeds[23].Owner, g.Deeds[23].Mortgaged = 0, true
-	must(t, g, 0, Action{Kind: "end"})
 	standOn(t, g, 0, 23)
-	if g.here != -1 {
+	if g.here != -1 || g.Turn != 1 {
 		t.Fatal("here on a mortgaged street")
 	}
 	invariants(t, g)
@@ -385,8 +383,8 @@ func TestDebtTimeoutSellsThenPays(t *testing.T) {
 		t.Fatalf("phase %s", g.Phase)
 	}
 	ev := g.Timeout()
-	if !has(ev, "sold") || !has(ev, "paid") || g.Phase != PhaseEnd || g.Players[1].Cash != 1600 {
-		t.Fatalf("phase %s, creditor %d, events %v", g.Phase, g.Players[1].Cash, ev)
+	if !has(ev, "sold") || !has(ev, "paid") || g.Turn != 1 || g.Phase != PhaseRoll || g.Players[1].Cash != 1600 {
+		t.Fatalf("turn %d phase %s, creditor %d, events %v", g.Turn, g.Phase, g.Players[1].Cash, ev)
 	}
 	invariants(t, g)
 }
@@ -425,8 +423,8 @@ func TestDecline(t *testing.T) {
 	script(g, [2]int{1, 2})
 	must(t, g, 0, Action{Kind: "roll"}) // square 3, a street
 	ev := must(t, g, 0, Action{Kind: "decline"})
-	if !has(ev, "declined") || g.Deeds[3].Owner != -1 || g.Players[0].Cash != 1500 || g.Phase != PhaseEnd {
-		t.Fatalf("owner %d cash %d phase %s", g.Deeds[3].Owner, g.Players[0].Cash, g.Phase)
+	if !has(ev, "declined") || g.Deeds[3].Owner != -1 || g.Players[0].Cash != 1500 || !has(ev, "turn") || g.Turn != 1 {
+		t.Fatalf("owner %d cash %d turn %d", g.Deeds[3].Owner, g.Players[0].Cash, g.Turn)
 	}
 	if _, err := g.Apply(1, Action{Kind: "buy"}); err == nil {
 		t.Fatal("bought by another player")
@@ -597,8 +595,8 @@ func TestStartBonusRoll(t *testing.T) {
 	}
 	must(t, g, 0, Action{Kind: "roll"}) // the bonus roll: square 6
 	must(t, g, 0, Action{Kind: "decline"})
-	if g.Phase != PhaseEnd {
-		t.Fatalf("phase %s after the bonus roll", g.Phase)
+	if g.Turn != 1 {
+		t.Fatalf("turn %d after the bonus roll", g.Turn)
 	}
 
 	// passing the start is no landing on it
@@ -636,12 +634,52 @@ func TestStartBonusBuild(t *testing.T) {
 	if s := &g.Board.Squares[21]; g.Deeds[21].Level != 3 || g.Players[0].Cash != cash-2*s.BuildCost {
 		t.Fatalf("level %d cash %d", g.Deeds[21].Level, g.Players[0].Cash)
 	}
-	if _, err := g.Apply(0, Action{Kind: "build", Square: 21, Level: 4}); err != ErrInvalid || g.View().Anywhere {
-		t.Fatalf("built twice: %v", err)
+	if g.Turn != 1 || g.View().Anywhere {
+		t.Fatalf("turn %d, anywhere %v after the build", g.Turn, g.View().Anywhere)
 	}
-	must(t, g, 0, Action{Kind: "end"})
-	if g.View().Anywhere {
-		t.Fatal("anywhere for the next player")
+	if _, err := g.Apply(0, Action{Kind: "build", Square: 21, Level: 4}); err == nil {
+		t.Fatal("built twice")
+	}
+	invariants(t, g)
+
+	// nothing of one's own to build on: the turn passes at once
+	g = newGame(2, testRules, 1)
+	g.coin = func() bool { return false }
+	g.Deeds[5].Owner = 0 // a transit line
+	g.Players[0].Pos = 36
+	script(g, [2]int{1, 3})
+	ev := must(t, g, 0, Action{Kind: "roll"})
+	if !has(ev, "bonus") || !has(ev, "turn") || g.Turn != 1 || g.View().Anywhere {
+		t.Fatalf("turn %d phase %s, events %v", g.Turn, g.Phase, ev)
+	}
+	invariants(t, g)
+}
+
+// The turn waits while the player may build, and passes by itself once they cannot: the build
+// done, or the street mortgaged; ending it by hand still works.
+func TestTurnPassesWhenDone(t *testing.T) {
+	g := newGame(3, testRules, 1)
+	g.Deeds[21].Owner = 0
+	standOn(t, g, 0, 21)
+	if g.Phase != PhaseEnd || g.Turn != 0 || g.View().Here != 21 {
+		t.Fatalf("phase %s turn %d here %d", g.Phase, g.Turn, g.View().Here)
+	}
+	must(t, g, 0, Action{Kind: "offer", Offer: &Offer{To: 2, GiveCash: 10}}) // managing: the turn waits
+	if g.Phase != PhaseEnd || g.Turn != 0 {
+		t.Fatalf("phase %s turn %d after an offer", g.Phase, g.Turn)
+	}
+	ev := must(t, g, 0, Action{Kind: "mortgage", Square: 21})
+	if !has(ev, "turn") || g.Turn != 1 || g.Phase != PhaseRoll {
+		t.Fatalf("turn %d phase %s after mortgaging the street", g.Turn, g.Phase)
+	}
+
+	// by hand
+	g.Deeds[21].Mortgaged = false
+	g.Deeds[23].Owner = 1
+	standOn(t, g, 1, 23)
+	must(t, g, 1, Action{Kind: "end"})
+	if g.Turn != 2 {
+		t.Fatalf("turn %d after end", g.Turn)
 	}
 	invariants(t, g)
 }

@@ -173,7 +173,8 @@ func (g *Game) startBonus(p int) {
 }
 
 // settle is the end of the current player's move: they roll again after a double, then for
-// each roll won on the start, else they may end their turn.
+// each roll won on the start, else they may still build before ending their turn, else the
+// turn passes.
 func (g *Game) settle() {
 	switch pl := g.Players[g.Turn]; {
 	case pl.Bankrupt:
@@ -184,8 +185,10 @@ func (g *Game) settle() {
 		g.extra--
 		g.Doubles = 0 // a new run: its doubles count from none
 		g.setPhase(PhaseRoll)
-	default:
+	case g.canBuild():
 		g.setPhase(PhaseEnd)
+	default:
+		g.nextTurn()
 	}
 }
 

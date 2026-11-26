@@ -111,6 +111,9 @@ arrête et exclut, anti-flood, écriture non bloquante. Le protocole est décrit
   Tour, en milliers (on démarre avec 2 000, ses 2 millions) : prix, maisons, et une tour plus
   chère qu'une maison (150 à 500, comme son hôtel). Les loyers viennent des relevés d'un joueur.
   Lignes, compagnies, taxes et amende restent celles du jeu classique.
+- **Fin du tour** : elle se fait toute seule dès qu'il n'y a plus rien à décider. Le joueur ne la
+  donne à la main que s'il peut encore construire (sur sa rue, ou au Départ pile) : hypothéquer,
+  vendre et échanger se font de toute façon à tout moment.
 - **Dette** : on vend, on hypothèque ou on échange pour payer, sinon c'est la faillite. Tout part
   alors au créancier, ou retourne à la banque.
 - **Échanges** : propriétés et argent dans les deux sens, à tout moment. Une offre est revérifiée
